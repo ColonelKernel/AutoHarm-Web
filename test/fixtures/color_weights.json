@@ -1,0 +1,1751 @@
+[
+ {
+  "c": 0.0,
+  "available": null,
+  "weights": [
+   [
+    "nottingham",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.05,
+  "available": null,
+  "weights": [
+   [
+    "nottingham",
+    0.85
+   ],
+   [
+    "pop909",
+    0.15000000000000002
+   ]
+  ]
+ },
+ {
+  "c": 0.1,
+  "available": null,
+  "weights": [
+   [
+    "nottingham",
+    0.7
+   ],
+   [
+    "pop909",
+    0.30000000000000004
+   ]
+  ]
+ },
+ {
+  "c": 0.15,
+  "available": null,
+  "weights": [
+   [
+    "nottingham",
+    0.55
+   ],
+   [
+    "pop909",
+    0.44999999999999996
+   ]
+  ]
+ },
+ {
+  "c": 0.2,
+  "available": null,
+  "weights": [
+   [
+    "nottingham",
+    0.3999999999999999
+   ],
+   [
+    "pop909",
+    0.6000000000000001
+   ]
+  ]
+ },
+ {
+  "c": 0.25,
+  "available": null,
+  "weights": [
+   [
+    "nottingham",
+    0.25
+   ],
+   [
+    "pop909",
+    0.75
+   ]
+  ]
+ },
+ {
+  "c": 0.3,
+  "available": null,
+  "weights": [
+   [
+    "nottingham",
+    0.10000000000000009
+   ],
+   [
+    "pop909",
+    0.8999999999999999
+   ]
+  ]
+ },
+ {
+  "c": 0.35,
+  "available": null,
+  "weights": [
+   [
+    "pop909",
+    0.9500000000000002
+   ],
+   [
+    "bach",
+    0.04999999999999982
+   ]
+  ]
+ },
+ {
+  "c": 0.4,
+  "available": null,
+  "weights": [
+   [
+    "pop909",
+    0.7999999999999998
+   ],
+   [
+    "bach",
+    0.20000000000000018
+   ]
+  ]
+ },
+ {
+  "c": 0.45,
+  "available": null,
+  "weights": [
+   [
+    "pop909",
+    0.6499999999999999
+   ],
+   [
+    "bach",
+    0.3500000000000001
+   ]
+  ]
+ },
+ {
+  "c": 0.5,
+  "available": null,
+  "weights": [
+   [
+    "pop909",
+    0.5
+   ],
+   [
+    "bach",
+    0.5
+   ]
+  ]
+ },
+ {
+  "c": 0.55,
+  "available": null,
+  "weights": [
+   [
+    "pop909",
+    0.34999999999999987
+   ],
+   [
+    "bach",
+    0.6500000000000001
+   ]
+  ]
+ },
+ {
+  "c": 0.6,
+  "available": null,
+  "weights": [
+   [
+    "pop909",
+    0.20000000000000018
+   ],
+   [
+    "bach",
+    0.7999999999999998
+   ]
+  ]
+ },
+ {
+  "c": 0.65,
+  "available": null,
+  "weights": [
+   [
+    "pop909",
+    0.04999999999999982
+   ],
+   [
+    "bach",
+    0.9500000000000002
+   ]
+  ]
+ },
+ {
+  "c": 0.7,
+  "available": null,
+  "weights": [
+   [
+    "bach",
+    0.9000000000000004
+   ],
+   [
+    "openbook",
+    0.09999999999999964
+   ]
+  ]
+ },
+ {
+  "c": 0.75,
+  "available": null,
+  "weights": [
+   [
+    "bach",
+    0.75
+   ],
+   [
+    "openbook",
+    0.25
+   ]
+  ]
+ },
+ {
+  "c": 0.8,
+  "available": null,
+  "weights": [
+   [
+    "bach",
+    0.5999999999999996
+   ],
+   [
+    "openbook",
+    0.40000000000000036
+   ]
+  ]
+ },
+ {
+  "c": 0.85,
+  "available": null,
+  "weights": [
+   [
+    "bach",
+    0.4500000000000002
+   ],
+   [
+    "openbook",
+    0.5499999999999998
+   ]
+  ]
+ },
+ {
+  "c": 0.9,
+  "available": null,
+  "weights": [
+   [
+    "bach",
+    0.2999999999999998
+   ],
+   [
+    "openbook",
+    0.7000000000000002
+   ]
+  ]
+ },
+ {
+  "c": 0.95,
+  "available": null,
+  "weights": [
+   [
+    "bach",
+    0.15000000000000036
+   ],
+   [
+    "openbook",
+    0.8499999999999996
+   ]
+  ]
+ },
+ {
+  "c": 1.0,
+  "available": null,
+  "weights": [
+   [
+    "openbook",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.0,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.05,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.85
+   ],
+   [
+    "pop909",
+    0.15000000000000002
+   ]
+  ]
+ },
+ {
+  "c": 0.1,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.7
+   ],
+   [
+    "pop909",
+    0.30000000000000004
+   ]
+  ]
+ },
+ {
+  "c": 0.15,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.55
+   ],
+   [
+    "pop909",
+    0.44999999999999996
+   ]
+  ]
+ },
+ {
+  "c": 0.2,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.3999999999999999
+   ],
+   [
+    "pop909",
+    0.6000000000000001
+   ]
+  ]
+ },
+ {
+  "c": 0.25,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.25
+   ],
+   [
+    "pop909",
+    0.75
+   ]
+  ]
+ },
+ {
+  "c": 0.3,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.10000000000000009
+   ],
+   [
+    "pop909",
+    0.8999999999999999
+   ]
+  ]
+ },
+ {
+  "c": 0.35,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.9500000000000002
+   ],
+   [
+    "bach",
+    0.04999999999999982
+   ]
+  ]
+ },
+ {
+  "c": 0.4,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.7999999999999998
+   ],
+   [
+    "bach",
+    0.20000000000000018
+   ]
+  ]
+ },
+ {
+  "c": 0.45,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.6499999999999999
+   ],
+   [
+    "bach",
+    0.3500000000000001
+   ]
+  ]
+ },
+ {
+  "c": 0.5,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.5
+   ],
+   [
+    "bach",
+    0.5
+   ]
+  ]
+ },
+ {
+  "c": 0.55,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.34999999999999987
+   ],
+   [
+    "bach",
+    0.6500000000000001
+   ]
+  ]
+ },
+ {
+  "c": 0.6,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.20000000000000018
+   ],
+   [
+    "bach",
+    0.7999999999999998
+   ]
+  ]
+ },
+ {
+  "c": 0.65,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.04999999999999982
+   ],
+   [
+    "bach",
+    0.9500000000000002
+   ]
+  ]
+ },
+ {
+  "c": 0.7,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.9000000000000004
+   ],
+   [
+    "openbook",
+    0.09999999999999964
+   ]
+  ]
+ },
+ {
+  "c": 0.75,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.75
+   ],
+   [
+    "openbook",
+    0.25
+   ]
+  ]
+ },
+ {
+  "c": 0.8,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.5999999999999996
+   ],
+   [
+    "openbook",
+    0.40000000000000036
+   ]
+  ]
+ },
+ {
+  "c": 0.85,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.4500000000000002
+   ],
+   [
+    "openbook",
+    0.5499999999999998
+   ]
+  ]
+ },
+ {
+  "c": 0.9,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.2999999999999998
+   ],
+   [
+    "openbook",
+    0.7000000000000002
+   ]
+  ]
+ },
+ {
+  "c": 0.95,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.15000000000000036
+   ],
+   [
+    "openbook",
+    0.8499999999999996
+   ]
+  ]
+ },
+ {
+  "c": 1.0,
+  "available": [
+   "nottingham",
+   "pop909",
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "openbook",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.0,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.05,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.9
+   ],
+   [
+    "pop909",
+    0.1
+   ]
+  ]
+ },
+ {
+  "c": 0.1,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.8
+   ],
+   [
+    "pop909",
+    0.2
+   ]
+  ]
+ },
+ {
+  "c": 0.15,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.7
+   ],
+   [
+    "pop909",
+    0.3
+   ]
+  ]
+ },
+ {
+  "c": 0.2,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.6
+   ],
+   [
+    "pop909",
+    0.4
+   ]
+  ]
+ },
+ {
+  "c": 0.25,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.5
+   ],
+   [
+    "pop909",
+    0.5
+   ]
+  ]
+ },
+ {
+  "c": 0.3,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.4
+   ],
+   [
+    "pop909",
+    0.6
+   ]
+  ]
+ },
+ {
+  "c": 0.35,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.30000000000000004
+   ],
+   [
+    "pop909",
+    0.7
+   ]
+  ]
+ },
+ {
+  "c": 0.4,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.19999999999999996
+   ],
+   [
+    "pop909",
+    0.8
+   ]
+  ]
+ },
+ {
+  "c": 0.45,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "nottingham",
+    0.09999999999999998
+   ],
+   [
+    "pop909",
+    0.9
+   ]
+  ]
+ },
+ {
+  "c": 0.5,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.55,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.8999999999999999
+   ],
+   [
+    "openbook",
+    0.10000000000000009
+   ]
+  ]
+ },
+ {
+  "c": 0.6,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.8
+   ],
+   [
+    "openbook",
+    0.19999999999999996
+   ]
+  ]
+ },
+ {
+  "c": 0.65,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.7
+   ],
+   [
+    "openbook",
+    0.30000000000000004
+   ]
+  ]
+ },
+ {
+  "c": 0.7,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.6000000000000001
+   ],
+   [
+    "openbook",
+    0.3999999999999999
+   ]
+  ]
+ },
+ {
+  "c": 0.75,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.5
+   ],
+   [
+    "openbook",
+    0.5
+   ]
+  ]
+ },
+ {
+  "c": 0.8,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.3999999999999999
+   ],
+   [
+    "openbook",
+    0.6000000000000001
+   ]
+  ]
+ },
+ {
+  "c": 0.85,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.30000000000000004
+   ],
+   [
+    "openbook",
+    0.7
+   ]
+  ]
+ },
+ {
+  "c": 0.9,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.19999999999999996
+   ],
+   [
+    "openbook",
+    0.8
+   ]
+  ]
+ },
+ {
+  "c": 0.95,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "pop909",
+    0.10000000000000009
+   ],
+   [
+    "openbook",
+    0.8999999999999999
+   ]
+  ]
+ },
+ {
+  "c": 1.0,
+  "available": [
+   "nottingham",
+   "pop909",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "openbook",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.0,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.05,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.1,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.15,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.2,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.25,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.3,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.35,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.4,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.45,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.5,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.55,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.6,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.65,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.7,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.75,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.8,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.85,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.9,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.95,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 1.0,
+  "available": [
+   "pop909"
+  ],
+  "weights": [
+   [
+    "pop909",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.0,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.05,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.95
+   ],
+   [
+    "openbook",
+    0.05
+   ]
+  ]
+ },
+ {
+  "c": 0.1,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.9
+   ],
+   [
+    "openbook",
+    0.1
+   ]
+  ]
+ },
+ {
+  "c": 0.15,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.85
+   ],
+   [
+    "openbook",
+    0.15
+   ]
+  ]
+ },
+ {
+  "c": 0.2,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.8
+   ],
+   [
+    "openbook",
+    0.2
+   ]
+  ]
+ },
+ {
+  "c": 0.25,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.75
+   ],
+   [
+    "openbook",
+    0.25
+   ]
+  ]
+ },
+ {
+  "c": 0.3,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.7
+   ],
+   [
+    "openbook",
+    0.3
+   ]
+  ]
+ },
+ {
+  "c": 0.35,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.65
+   ],
+   [
+    "openbook",
+    0.35
+   ]
+  ]
+ },
+ {
+  "c": 0.4,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.6
+   ],
+   [
+    "openbook",
+    0.4
+   ]
+  ]
+ },
+ {
+  "c": 0.45,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.55
+   ],
+   [
+    "openbook",
+    0.45
+   ]
+  ]
+ },
+ {
+  "c": 0.5,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.5
+   ],
+   [
+    "openbook",
+    0.5
+   ]
+  ]
+ },
+ {
+  "c": 0.55,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.44999999999999996
+   ],
+   [
+    "openbook",
+    0.55
+   ]
+  ]
+ },
+ {
+  "c": 0.6,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.4
+   ],
+   [
+    "openbook",
+    0.6
+   ]
+  ]
+ },
+ {
+  "c": 0.65,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.35
+   ],
+   [
+    "openbook",
+    0.65
+   ]
+  ]
+ },
+ {
+  "c": 0.7,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.30000000000000004
+   ],
+   [
+    "openbook",
+    0.7
+   ]
+  ]
+ },
+ {
+  "c": 0.75,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.25
+   ],
+   [
+    "openbook",
+    0.75
+   ]
+  ]
+ },
+ {
+  "c": 0.8,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.19999999999999996
+   ],
+   [
+    "openbook",
+    0.8
+   ]
+  ]
+ },
+ {
+  "c": 0.85,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.15000000000000002
+   ],
+   [
+    "openbook",
+    0.85
+   ]
+  ]
+ },
+ {
+  "c": 0.9,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.09999999999999998
+   ],
+   [
+    "openbook",
+    0.9
+   ]
+  ]
+ },
+ {
+  "c": 0.95,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "bach",
+    0.050000000000000044
+   ],
+   [
+    "openbook",
+    0.95
+   ]
+  ]
+ },
+ {
+  "c": 1.0,
+  "available": [
+   "bach",
+   "openbook"
+  ],
+  "weights": [
+   [
+    "openbook",
+    1.0
+   ]
+  ]
+ },
+ {
+  "c": 0.0,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.05,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.1,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.15,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.2,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.25,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.3,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.35,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.4,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.45,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.5,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.55,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.6,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.65,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.7,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.75,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.8,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.85,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.9,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 0.95,
+  "available": [],
+  "weights": []
+ },
+ {
+  "c": 1.0,
+  "available": [],
+  "weights": []
+ }
+]

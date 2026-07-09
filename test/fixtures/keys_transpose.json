@@ -1,0 +1,823 @@
+{
+ "parseKey": [
+  {
+   "key": "C:maj",
+   "tonicPc": 0,
+   "mode": "maj",
+   "offset": 0
+  },
+  {
+   "key": "A:min",
+   "tonicPc": 9,
+   "mode": "min",
+   "offset": 0
+  },
+  {
+   "key": "Am",
+   "tonicPc": 9,
+   "mode": "min",
+   "offset": 0
+  },
+  {
+   "key": "Gm",
+   "tonicPc": 7,
+   "mode": "min",
+   "offset": 2
+  },
+  {
+   "key": "Eb major",
+   "tonicPc": 3,
+   "mode": "maj",
+   "offset": -3
+  },
+  {
+   "key": "F# minor",
+   "tonicPc": 6,
+   "mode": "min",
+   "offset": 3
+  },
+  {
+   "key": "Bb",
+   "tonicPc": 10,
+   "mode": "maj",
+   "offset": 2
+  },
+  {
+   "key": "C",
+   "tonicPc": 0,
+   "mode": "maj",
+   "offset": 0
+  },
+  {
+   "key": "",
+   "tonicPc": null,
+   "mode": "maj",
+   "offset": 0
+  },
+  {
+   "key": "  D:min ",
+   "tonicPc": 2,
+   "mode": "min",
+   "offset": -5
+  },
+  {
+   "key": "H:maj",
+   "tonicPc": null,
+   "mode": "maj",
+   "offset": 0
+  },
+  {
+   "key": "junk",
+   "tonicPc": null,
+   "mode": "maj",
+   "offset": 0
+  },
+  {
+   "key": "E",
+   "tonicPc": 4,
+   "mode": "maj",
+   "offset": -4
+  },
+  {
+   "key": "Fb:maj",
+   "tonicPc": 4,
+   "mode": "maj",
+   "offset": -4
+  },
+  {
+   "key": "B#:min",
+   "tonicPc": 0,
+   "mode": "min",
+   "offset": -3
+  },
+  {
+   "key": "Db major",
+   "tonicPc": 1,
+   "mode": "maj",
+   "offset": -1
+  }
+ ],
+ "transposeOffset": [
+  {
+   "tonicPc": 0,
+   "mode": "maj",
+   "offset": 0
+  },
+  {
+   "tonicPc": 0,
+   "mode": "min",
+   "offset": -3
+  },
+  {
+   "tonicPc": 1,
+   "mode": "maj",
+   "offset": -1
+  },
+  {
+   "tonicPc": 1,
+   "mode": "min",
+   "offset": -4
+  },
+  {
+   "tonicPc": 2,
+   "mode": "maj",
+   "offset": -2
+  },
+  {
+   "tonicPc": 2,
+   "mode": "min",
+   "offset": -5
+  },
+  {
+   "tonicPc": 3,
+   "mode": "maj",
+   "offset": -3
+  },
+  {
+   "tonicPc": 3,
+   "mode": "min",
+   "offset": 6
+  },
+  {
+   "tonicPc": 4,
+   "mode": "maj",
+   "offset": -4
+  },
+  {
+   "tonicPc": 4,
+   "mode": "min",
+   "offset": 5
+  },
+  {
+   "tonicPc": 5,
+   "mode": "maj",
+   "offset": -5
+  },
+  {
+   "tonicPc": 5,
+   "mode": "min",
+   "offset": 4
+  },
+  {
+   "tonicPc": 6,
+   "mode": "maj",
+   "offset": 6
+  },
+  {
+   "tonicPc": 6,
+   "mode": "min",
+   "offset": 3
+  },
+  {
+   "tonicPc": 7,
+   "mode": "maj",
+   "offset": 5
+  },
+  {
+   "tonicPc": 7,
+   "mode": "min",
+   "offset": 2
+  },
+  {
+   "tonicPc": 8,
+   "mode": "maj",
+   "offset": 4
+  },
+  {
+   "tonicPc": 8,
+   "mode": "min",
+   "offset": 1
+  },
+  {
+   "tonicPc": 9,
+   "mode": "maj",
+   "offset": 3
+  },
+  {
+   "tonicPc": 9,
+   "mode": "min",
+   "offset": 0
+  },
+  {
+   "tonicPc": 10,
+   "mode": "maj",
+   "offset": 2
+  },
+  {
+   "tonicPc": 10,
+   "mode": "min",
+   "offset": -1
+  },
+  {
+   "tonicPc": 11,
+   "mode": "maj",
+   "offset": 1
+  },
+  {
+   "tonicPc": 11,
+   "mode": "min",
+   "offset": -2
+  }
+ ],
+ "transposeChord": [
+  {
+   "chord": "C:maj",
+   "offset": -6,
+   "result": "F#:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": -5,
+   "result": "G:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": -4,
+   "result": "Ab:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": -3,
+   "result": "A:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": -2,
+   "result": "Bb:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": -1,
+   "result": "B:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": 0,
+   "result": "C:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": 1,
+   "result": "Db:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": 2,
+   "result": "D:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": 3,
+   "result": "Eb:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": 4,
+   "result": "E:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": 5,
+   "result": "F:maj"
+  },
+  {
+   "chord": "C:maj",
+   "offset": 6,
+   "result": "F#:maj"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": -6,
+   "result": "E:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": -5,
+   "result": "F:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": -4,
+   "result": "F#:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": -3,
+   "result": "G:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": -2,
+   "result": "Ab:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": -1,
+   "result": "A:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": 0,
+   "result": "Bb:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": 1,
+   "result": "B:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": 2,
+   "result": "C:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": 3,
+   "result": "Db:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": 4,
+   "result": "D:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": 5,
+   "result": "Eb:maj7"
+  },
+  {
+   "chord": "Bb:maj7",
+   "offset": 6,
+   "result": "E:maj7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": -6,
+   "result": "C:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": -5,
+   "result": "Db:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": -4,
+   "result": "D:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": -3,
+   "result": "Eb:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": -2,
+   "result": "E:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": -1,
+   "result": "F:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": 0,
+   "result": "F#:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": 1,
+   "result": "G:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": 2,
+   "result": "Ab:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": 3,
+   "result": "A:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": 4,
+   "result": "Bb:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": 5,
+   "result": "B:min7"
+  },
+  {
+   "chord": "F#:min7",
+   "offset": 6,
+   "result": "C:min7"
+  },
+  {
+   "chord": "N",
+   "offset": -6,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": -5,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": -4,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": -3,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": -2,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": -1,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": 0,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": 1,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": 2,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": 3,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": 4,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": 5,
+   "result": "N"
+  },
+  {
+   "chord": "N",
+   "offset": 6,
+   "result": "N"
+  },
+  {
+   "chord": "-",
+   "offset": -6,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": -5,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": -4,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": -3,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": -2,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": -1,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": 0,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": 1,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": 2,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": 3,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": 4,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": 5,
+   "result": "-"
+  },
+  {
+   "chord": "-",
+   "offset": 6,
+   "result": "-"
+  },
+  {
+   "chord": "",
+   "offset": -6,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": -5,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": -4,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": -3,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": -2,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": -1,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": 0,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": 1,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": 2,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": 3,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": 4,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": 5,
+   "result": ""
+  },
+  {
+   "chord": "",
+   "offset": 6,
+   "result": ""
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": -6,
+   "result": "F:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": -5,
+   "result": "F#:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": -4,
+   "result": "G:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": -3,
+   "result": "Ab:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": -2,
+   "result": "A:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": -1,
+   "result": "Bb:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": 0,
+   "result": "B:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": 1,
+   "result": "C:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": 2,
+   "result": "Db:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": 3,
+   "result": "D:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": 4,
+   "result": "Eb:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": 5,
+   "result": "E:hdim7"
+  },
+  {
+   "chord": "B:hdim7",
+   "offset": 6,
+   "result": "F:hdim7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": -6,
+   "result": "D:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": -5,
+   "result": "Eb:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": -4,
+   "result": "E:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": -3,
+   "result": "F:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": -2,
+   "result": "F#:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": -1,
+   "result": "G:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": 0,
+   "result": "Ab:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": 1,
+   "result": "A:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": 2,
+   "result": "Bb:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": 3,
+   "result": "B:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": 4,
+   "result": "C:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": 5,
+   "result": "Db:7"
+  },
+  {
+   "chord": "Ab:7",
+   "offset": 6,
+   "result": "D:7"
+  },
+  {
+   "chord": "X:maj",
+   "offset": -6,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": -5,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": -4,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": -3,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": -2,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": -1,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": 0,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": 1,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": 2,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": 3,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": 4,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": 5,
+   "result": "X:maj"
+  },
+  {
+   "chord": "X:maj",
+   "offset": 6,
+   "result": "X:maj"
+  }
+ ],
+ "canonRoot": [
+  "C",
+  "Db",
+  "D",
+  "Eb",
+  "E",
+  "F",
+  "F#",
+  "G",
+  "Ab",
+  "A",
+  "Bb",
+  "B"
+ ]
+}
