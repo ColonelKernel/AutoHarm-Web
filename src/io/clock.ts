@@ -20,6 +20,8 @@ onmessage = (e) => {
 
 export class LookaheadClock {
   bpm = 120
+  /** grid subdivisions per quarter note (4 = fire on every 16th note) */
+  stepsPerBeat = 1
   /** seconds of lookahead per scheduling pass */
   scheduleAhead = 0.15
 
@@ -66,7 +68,7 @@ export class LookaheadClock {
     while (this.nextBeatTime < this.ctx.currentTime + this.scheduleAhead) {
       this.beatIndex += 1
       this.onBeat(this.beatIndex, this.nextBeatTime)
-      this.nextBeatTime += 60 / this.bpm
+      this.nextBeatTime += 60 / (this.bpm * this.stepsPerBeat)
     }
   }
 }

@@ -9,7 +9,7 @@ import { Emitter } from '../engine/events'
 import { MarkovEngine } from '../engine/markov/markovEngine'
 import { loadCorpora, type RawCorpora } from '../engine/markov/corpusLoader'
 import { Sonifier } from '../engine/player/sonifier'
-import { AutoPlayer } from '../engine/player/autoPlayer'
+import { AutoPlayer, STEPS_PER_BEAT } from '../engine/player/autoPlayer'
 import { ModelRegistry } from '../engine/registry'
 import { mulberry32, randomSeed } from '../engine/random'
 import { LookaheadClock } from '../io/clock'
@@ -36,8 +36,8 @@ export class Runtime {
   private externalBpm: number | null = null
 
   // --- MIDI recording (for .mid export) ---
-  private currentBeat = -1 // monotonic beat counter within the current take
-  private recordBase = 0 // beat offset so a cleared/rebased take starts at 0
+  private currentStep = -1 // monotonic 16th-step counter within the current take
+  private recordBase = 0 // step offset so a cleared/rebased take starts at 0
   private recorded: ChordEvent[] = [] // voiced chords captured while playing
   /** Called when the recording gains its first chord (UI enables Export). */
   onRecordingChanged: ((count: number) => void) | null = null
@@ -99,13 +99,13 @@ export class Runtime {
       this.player.stop('stopped')
       this.midi.allNotesOff()
     }
-    this.midi.onClockBeat = () => {
+    this.midi.onClockStep = () => {
       if (this.clockSource !== 'external' || !this.player.player.active) return
-      this.currentBeat += 1
+      this.currentStep += 1
       // Reactive clock: schedule the chord a hair ahead of now so Web Audio /
       // Web MIDI don't get a start-in-the-past.
       const at = this.ctx ? this.ctx.currentTime + 0.005 : undefined
-      this.player.onBeat(at)
+      this.player.onStep(at)
     }
     this.midi.onClockTempo = (bpm) => {
       if (this.clockSource !== 'external') return
@@ -143,10 +143,11 @@ export class Runtime {
     if (!this.ctx) {
       this.ctx = new AudioContext()
       this.synth = new PreviewSynth(this.ctx)
-      this.clock = new LookaheadClock(this.ctx, (_beat, atTime) => {
-        this.currentBeat += 1 // monotonic beat index for the recorder
-        this.player.onBeat(atTime)
+      this.clock = new LookaheadClock(this.ctx, (_step, atTime) => {
+        this.currentStep += 1 // monotonic 16th-step index for the recorder
+        this.player.onStep(atTime)
       })
+      this.clock.stepsPerBeat = STEPS_PER_BEAT // 16th-note grid
       this.clock.bpm = this.bpm // apply any tempo chosen before first Play
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume()
@@ -176,18 +177,21 @@ export class Runtime {
 
   // --- recording / export ---------------------------------------------------
 
-  /** Reset the beat counter + recording at the start of a take. */
+  /** Reset the step counter + recording at the start of a take. */
   private beginTake(): void {
-    this.currentBeat = -1
+    this.currentStep = -1
     this.recordBase = 0
     this.recorded = []
     this.onRecordingChanged?.(0)
   }
 
-  /** Record a voiced chord (or a silence boundary) at the current take beat. */
+  /** Record a voiced chord (or a silence boundary) at the current take step.
+   * The SMF writer positions events in quarter-note beats, so convert the
+   * 16th-note step index (step / STEPS_PER_BEAT) — sub-beat onsets land as
+   * fractional beats. */
   private record(notes: number[], velocity: number): void {
     if (this.recorded.length >= MAX_RECORDED_EVENTS) return
-    const beat = Math.max(0, this.currentBeat - this.recordBase)
+    const beat = Math.max(0, this.currentStep - this.recordBase) / STEPS_PER_BEAT
     this.recorded.push({ startBeat: beat, notes: [...notes], velocity })
     this.onRecordingChanged?.(this.recorded.filter((c) => c.notes.length > 0).length)
   }
@@ -196,7 +200,7 @@ export class Runtime {
    * continues cleanly from beat 0 rather than leaving a long leading gap. */
   clearRecording(): void {
     this.recorded = []
-    this.recordBase = this.currentBeat + 1
+    this.recordBase = this.currentStep + 1
     this.onRecordingChanged?.(0)
   }
 

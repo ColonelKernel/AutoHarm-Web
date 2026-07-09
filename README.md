@@ -40,8 +40,10 @@ MIDI setup and an end-to-end test.
 - **Voicing engine** — chord-symbol → MIDI voicing with nearest-voice-leading,
   a functional-harmony ladder (triads → +voice-leading → 7ths → drop-2 + upper
   extensions), and Harmony-Singer-style diatonic added voices.
-- **Auto-player** — walks the chain over harmonic-rhythm templates with
-  loop / regen / one-shot phrase modes, hold (vamp), and reroll.
+- **Auto-player** — walks the chain over harmonic-rhythm templates on a
+  16th-note grid (whole/half, dotted, quarters, charleston, offbeats, son
+  clave, gallop, eighths, sixteenths — sparse→dense on one dial, shown as a
+  step grid) with loop / regen / one-shot phrase modes, hold (vamp), and reroll.
 - **Transport** — an internal Web Worker lookahead clock, or **external MIDI
   clock** to slave to the DAW's tempo/transport (Clock → External; follows
   0xFA/0xFB/0xFC + 24 PPQN and shows the detected BPM).

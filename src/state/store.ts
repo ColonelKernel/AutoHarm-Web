@@ -5,6 +5,13 @@
 import { create } from 'zustand'
 import { getRuntime } from '../app/runtime'
 import { decodePgm, ccToParam, MODES, SEED_LIST, KEY_ROOTS, type PlayerMode } from '../engine/voicing/performanceMap'
+import {
+  TEMPLATES,
+  RHYTHM_ORDER,
+  DEFAULT_TEMPLATE_ID,
+  STEPS_PER_BAR,
+  rhythmToTemplate,
+} from '../engine/player/autoPlayer'
 import { MidiIO, type MidiPortInfo } from '../io/midi'
 import { downloadBytes } from '../io/download'
 import type { ModelName, SessionMode } from '../engine/markov/config'
@@ -49,6 +56,8 @@ interface AppState {
   phraseBars: number
   rhythm: number
   rhythmName: string
+  rhythmOnsets: number[] // step indices of chord onsets (for the grid display)
+  rhythmSteps: number // grid length in steps (spanBars * STEPS_PER_BAR)
 
   // voicing dials
   voicingLevel: number
@@ -141,8 +150,11 @@ export const useStore = create<AppState>((set, get) => ({
   mode: 'loop',
   hold: false,
   phraseBars: 8,
-  rhythm: 2 / 6, // index 2 of RHYTHM_ORDER -> template 2 (half_half default)
-  rhythmName: 'half_half',
+  // dial position that selects the default template (half + half)
+  rhythm: RHYTHM_ORDER.indexOf(DEFAULT_TEMPLATE_ID) / (RHYTHM_ORDER.length - 1),
+  rhythmName: TEMPLATES[DEFAULT_TEMPLATE_ID].name,
+  rhythmOnsets: TEMPLATES[DEFAULT_TEMPLATE_ID].onsets,
+  rhythmSteps: TEMPLATES[DEFAULT_TEMPLATE_ID].spanBars * STEPS_PER_BAR,
 
   voicingLevel: 0,
   voiceDistance: 0,
@@ -372,7 +384,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setRhythm(v) {
     const name = getRuntime().player.setRhythm(v)
-    set({ rhythm: v, rhythmName: name })
+    const t = TEMPLATES[rhythmToTemplate(v)]
+    set({ rhythm: v, rhythmName: name, rhythmOnsets: t.onsets, rhythmSteps: t.spanBars * STEPS_PER_BAR })
   },
 
   setVoicingLevel(v) {

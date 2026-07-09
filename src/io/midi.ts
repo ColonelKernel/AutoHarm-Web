@@ -24,6 +24,9 @@ const CONTINUE = 0xfb
 const STOP = 0xfc
 
 const PPQN = 24 // MIDI-clock pulses per quarter note
+// Fire a sequencer step every 6 pulses = a 16th note (matches the engine's
+// STEPS_PER_BEAT = 4; kept local so io/ stays decoupled from engine/).
+const PULSES_PER_STEP = PPQN / 4
 
 export interface MidiPortInfo {
   id: string
@@ -43,7 +46,7 @@ export class MidiIO {
   onPortsChanged: (() => void) | null = null
 
   // MIDI-clock (external transport) callbacks — driven by the selected input.
-  onClockBeat: (() => void) | null = null // every 24th pulse (a quarter note)
+  onClockStep: (() => void) | null = null // every 6th pulse (a 16th note)
   onClockStart: (() => void) | null = null // 0xFA
   onClockContinue: (() => void) | null = null // 0xFB
   onClockStop: (() => void) | null = null // 0xFC
@@ -122,21 +125,19 @@ export class MidiIO {
     }
   }
 
-  /** One 0xF8 pulse. Fires a beat every 24 pulses (on the pulse itself, so beat
+  /** One 0xF8 pulse. Fires a step every 6 pulses (on the pulse itself, so step
    * 0 aligns with Start) and periodically estimates tempo from pulse spacing. */
   private onClockPulse(timeStamp: number): void {
     this.pulseTimes.push(timeStamp)
     if (this.pulseTimes.length > PPQN + 1) this.pulseTimes.shift()
 
-    // Fire the beat BEFORE incrementing so pulse 0 == beat 0 (aligned to Start).
-    if (this.clockPulses % PPQN === 0) this.onClockBeat?.()
-    this.clockPulses += 1
-
-    // Periodic tempo estimate (every 6 pulses = a 16th note).
-    if (this.clockPulses % 6 === 0) {
+    // Fire the step BEFORE incrementing so pulse 0 == step 0 (aligned to Start).
+    if (this.clockPulses % PULSES_PER_STEP === 0) {
+      this.onClockStep?.()
       const bpm = this.estimateBpm()
       if (bpm !== null) this.onClockTempo?.(bpm)
     }
+    this.clockPulses += 1
   }
 
   /** Estimate BPM from the mean spacing of recent 0xF8 pulses (null if too few). */

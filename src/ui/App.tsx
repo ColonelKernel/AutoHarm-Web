@@ -28,6 +28,24 @@ function Dial(props: {
   )
 }
 
+/** Visualizes the current rhythm template on its 16th-note grid — filled cells
+ * are chord onsets, every 4th step (a beat) is emphasized. */
+function RhythmGrid({ steps, onsets }: { steps: number; onsets: number[] }) {
+  const set = new Set(onsets)
+  return (
+    <div className="rhythm-grid" aria-label="rhythm pattern">
+      {Array.from({ length: steps }, (_, i) => (
+        <span
+          key={i}
+          className={
+            'rg-cell' + (set.has(i) ? ' on' : '') + (i % 4 === 0 ? ' beat' : '') + (i % 16 === 0 ? ' bar' : '')
+          }
+        />
+      ))}
+    </div>
+  )
+}
+
 function IntroCard() {
   const [dismissed, setDismissed] = useState(() => {
     try {
@@ -181,6 +199,7 @@ export default function App() {
           </div>
           <Dial label="Rhythm" value={s.rhythm} onChange={s.setRhythm} display={s.rhythmName} />
         </div>
+        <RhythmGrid steps={s.rhythmSteps} onsets={s.rhythmOnsets} />
       </section>
 
       <section className="panel">

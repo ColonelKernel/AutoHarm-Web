@@ -22,30 +22,50 @@ export interface ChordSampler {
   sample(chord: string): Promise<SampleResultLike> | SampleResultLike
 }
 
-// Harmonic-rhythm templates: slot ONSETS in quarter-note beats within a
-// 1- or 2-bar (4/4) cycle. Chords change at each onset and sustain until the
-// next (the io layer flushes held notes before each new chord).
-export const TEMPLATES: Record<number, { name: string; spanBars: number; onsets: number[] }> = {
-  1: { name: 'whole_bar', spanBars: 1, onsets: [0] },
-  2: { name: 'half_half', spanBars: 1, onsets: [0, 2] },
-  3: { name: 'four_quarters', spanBars: 1, onsets: [0, 1, 2, 3] },
-  4: { name: 'half_qtr_qtr', spanBars: 1, onsets: [0, 2, 3] },
-  5: { name: 'qtr_qtr_half', spanBars: 1, onsets: [0, 1, 2] },
-  6: { name: 'qtr_half_qtr', spanBars: 1, onsets: [0, 1, 3] },
-  7: { name: 'static_2bar', spanBars: 2, onsets: [0] },
+// The sequencer runs on a 16th-note grid: STEPS_PER_BEAT steps per quarter
+// note, STEPS_PER_BAR per 4/4 bar. Templates place chord ONSETS on those steps,
+// which is what lets patterns be syncopated / offbeat, not just on-the-beat.
+export const STEPS_PER_BEAT = 4
+export const STEPS_PER_BAR = STEPS_PER_BEAT * 4 // 16
+
+// Harmonic-rhythm templates: slot ONSETS in 16th-note steps within a 1- or
+// 2-bar (4/4) cycle. Chords change at each onset and sustain until the next
+// (the io layer flushes held notes before each new chord).
+export interface Template {
+  name: string
+  spanBars: number
+  onsets: number[]
+}
+export const TEMPLATES: Record<number, Template> = {
+  1: { name: 'static (2 bars)', spanBars: 2, onsets: [0] },
+  2: { name: 'whole note', spanBars: 1, onsets: [0] },
+  3: { name: 'half + half', spanBars: 1, onsets: [0, 8] },
+  4: { name: 'charleston', spanBars: 1, onsets: [0, 10] }, // 1 & the "and of 3"
+  5: { name: 'dotted quarters', spanBars: 1, onsets: [0, 6, 12] }, // 3-against-4
+  6: { name: 'quarters', spanBars: 1, onsets: [0, 4, 8, 12] },
+  7: { name: 'quarters + push', spanBars: 1, onsets: [0, 4, 8, 14] }, // last chord anticipated
+  8: { name: 'offbeats', spanBars: 1, onsets: [2, 6, 10, 14] }, // all the "ands"
+  9: { name: 'son clave', spanBars: 2, onsets: [0, 6, 12, 20, 24] }, // 3-2 clave feel
+  10: { name: 'gallop', spanBars: 1, onsets: [0, 4, 6, 8, 12, 14] },
+  11: { name: 'eighth notes', spanBars: 1, onsets: [0, 2, 4, 6, 8, 10, 12, 14] },
+  12: { name: 'sixteenths', spanBars: 1, onsets: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] },
 }
 
+/** Default template id — matches the prior "half + half" default (chord every
+ * two beats), so existing behaviour is unchanged. */
+export const DEFAULT_TEMPLATE_ID = 3
+
 // Templates ordered SPARSE -> DENSE for the performable "rhythm" dial.
-export const RHYTHM_ORDER = [7, 1, 2, 4, 6, 5, 3]
+export const RHYTHM_ORDER = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 export const ROOT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
 
-export function templateCycleBeats(id: number): number {
-  return (TEMPLATES[id] || TEMPLATES[3]).spanBars * 4
+export function templateCycleSteps(id: number): number {
+  return (TEMPLATES[id] || TEMPLATES[DEFAULT_TEMPLATE_ID]).spanBars * STEPS_PER_BAR
 }
 
-export function isSlotOnset(id: number, beatInCycle: number): boolean {
-  return (TEMPLATES[id] || TEMPLATES[3]).onsets.indexOf(beatInCycle) !== -1
+export function isSlotOnset(id: number, stepInCycle: number): boolean {
+  return (TEMPLATES[id] || TEMPLATES[DEFAULT_TEMPLATE_ID]).onsets.indexOf(stepInCycle) !== -1
 }
 
 export function rhythmToTemplate(v: number): number {
@@ -59,7 +79,7 @@ export interface PlayerState {
   templateId: number
   pendingTemplateId: number | null
   lengthBars: number
-  beat: number
+  step: number // current 16th-note grid step within the phrase
   pending: string | null
   seed: string
   keyRoot: number
@@ -74,10 +94,10 @@ export interface PlayerState {
 export class AutoPlayer {
   readonly player: PlayerState = {
     active: false,
-    templateId: 2, // half_half (matches the rhythm dial's default)
+    templateId: DEFAULT_TEMPLATE_ID, // half + half (matches the rhythm dial default)
     pendingTemplateId: null,
     lengthBars: 8, // the Spice device's Phrase Length dial default
-    beat: -1, // first clock tick advances to 0
+    step: -1, // first clock tick advances to 0
     pending: null, // next chord to sonify on the beat
     seed: 'C:maj', // chord the chain (re)starts from = latest chord handled
     keyRoot: 0,
@@ -158,13 +178,13 @@ export class AutoPlayer {
   start(): void {
     const p = this.player
     p.active = true
-    p.beat = -1
+    p.step = -1
     p.pending = null
     p.phrase.clear()
     p.capturing = true // first pass always captures
     p.dirty = false
     this.generation++
-    const t = TEMPLATES[p.templateId] || TEMPLATES[3]
+    const t = TEMPLATES[p.templateId] || TEMPLATES[DEFAULT_TEMPLATE_ID]
     this.emitter.emit({
       type: 'log',
       message: `player: start ${p.mode} ${p.lengthBars} bars, template ${t.name}, seed ${p.seed}`,
@@ -191,7 +211,7 @@ export class AutoPlayer {
     if (!p.active) return
     p.phrase.clear()
     p.capturing = true
-    p.beat = -1
+    p.step = -1
     p.pending = null
     p.dirty = false
     this.generation++
@@ -219,26 +239,27 @@ export class AutoPlayer {
     p.dirty = false
   }
 
-  /** Quarter-note clock tick. `at` = audio-clock time for scheduled events. */
-  onBeat(at?: number): void {
+  /** One 16th-note grid step from the clock. `at` = audio-clock time for
+   * scheduled events. (Fires STEPS_PER_BEAT times per quarter note.) */
+  onStep(at?: number): void {
     const p = this.player
     if (!p.active) return
-    p.beat += 1
+    p.step += 1
 
     // Cycle boundary: one-shot stops; loop/regen wrap into a new cycle.
-    if (p.beat >= p.lengthBars * 4) {
+    if (p.step >= p.lengthBars * STEPS_PER_BAR) {
       if (p.mode === 'oneshot') {
         this.stop('done', at)
         return
       }
-      p.beat = 0
+      p.step = 0
       this.beginCycle()
     }
-    const b = p.beat
+    const b = p.step
 
     // Hold / vamp: keep sounding the current chord, don't advance the walk.
     if (p.hold) {
-      if (isSlotOnset(p.templateId, b % templateCycleBeats(p.templateId))) {
+      if (isSlotOnset(p.templateId, b % templateCycleSteps(p.templateId))) {
         const c = p.phrase.get(b) || p.pending || p.seed
         this.sonifier.sonifyChord(c, 'hold', at)
       }
@@ -247,12 +268,12 @@ export class AutoPlayer {
 
     // Mid-cycle rhythm change on the bar downbeat (during LOOP replay the
     // template is frozen so the loop stays coherent).
-    if (b % 4 === 0 && p.capturing && p.pendingTemplateId != null) {
+    if (b % STEPS_PER_BAR === 0 && p.capturing && p.pendingTemplateId != null) {
       p.templateId = p.pendingTemplateId
       p.pendingTemplateId = null
     }
 
-    if (!isSlotOnset(p.templateId, b % templateCycleBeats(p.templateId))) return
+    if (!isSlotOnset(p.templateId, b % templateCycleSteps(p.templateId))) return
 
     if (p.capturing) {
       const chord = p.pending || p.seed
@@ -268,7 +289,7 @@ export class AutoPlayer {
 
   /* --- control handlers (mirror the markov_osc.js Max handlers) ------------ */
 
-  /** `template <1..7>` — choose the harmonic-rhythm template directly. */
+  /** `template <id>` — choose the harmonic-rhythm template directly. */
   setTemplate(id: number): void {
     const t = Math.round(id)
     if (TEMPLATES[t]) {

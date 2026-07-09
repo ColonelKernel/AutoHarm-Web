@@ -130,28 +130,28 @@ describe('MIDI clock (external transport)', () => {
     return io
   }
 
-  it('fires a beat every 24 pulses, with beat 0 aligned to the first pulse', async () => {
+  it('fires a step every 6 pulses (16th notes), with step 0 aligned to Start', async () => {
     const io = await makeClockIO()
-    let beats = 0
-    io.onClockBeat = () => beats++
+    let steps = 0
+    io.onClockStep = () => steps++
     inClock.emit([0xfa]) // Start (reset)
-    for (let i = 0; i < 48; i++) inClock.emit([0xf8], i * 20)
-    // pulses 0 and 24 are beat boundaries -> 2 beats over 48 pulses
-    expect(beats).toBe(2)
+    for (let i = 0; i < 24; i++) inClock.emit([0xf8], i * 20)
+    // pulses 0,6,12,18 are step boundaries -> 4 steps (one quarter note) over 24 pulses
+    expect(steps).toBe(4)
   })
 
-  it('Start resets the pulse counter so beats realign', async () => {
+  it('Start resets the pulse counter so steps realign', async () => {
     const io = await makeClockIO()
-    const beatPulses: number[] = []
+    const stepPulses: number[] = []
     let pulse = 0
-    io.onClockBeat = () => beatPulses.push(pulse)
+    io.onClockStep = () => stepPulses.push(pulse)
     inClock.emit([0xfa])
-    for (let i = 0; i < 12; i++) { inClock.emit([0xf8], i); pulse++ }
-    inClock.emit([0xfa]) // restart mid-bar
+    for (let i = 0; i < 3; i++) { inClock.emit([0xf8], i); pulse++ }
+    inClock.emit([0xfa]) // restart mid-step
     pulse = 0
-    for (let i = 0; i < 24; i++) { inClock.emit([0xf8], i); pulse++ }
-    // beats fire at pulse 0 (first bar), then pulse 0 again after restart
-    expect(beatPulses).toEqual([0, 0])
+    for (let i = 0; i < 6; i++) { inClock.emit([0xf8], i); pulse++ }
+    // a step fires at pulse 0, then pulse 0 again after restart
+    expect(stepPulses).toEqual([0, 0])
   })
 
   it('routes Start / Continue / Stop callbacks', async () => {
