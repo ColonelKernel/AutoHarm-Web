@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore, SEED_LIST, KEY_ROOTS, MODES } from '../state/store'
 import { MODEL_LIST } from '../engine/voicing/performanceMap'
 import { SESSION_MODES, type ModelName, type SessionMode } from '../engine/markov/config'
@@ -28,6 +28,60 @@ function Dial(props: {
   )
 }
 
+function IntroCard() {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem('autoharm.introDismissed') === '1'
+    } catch {
+      return false
+    }
+  })
+  if (dismissed) return null
+  const dismiss = () => {
+    try {
+      localStorage.setItem('autoharm.introDismissed', '1')
+    } catch {
+      /* private mode: just hide for the session */
+    }
+    setDismissed(true)
+  }
+  return (
+    <div className="intro">
+      <button className="intro-close" onClick={dismiss} aria-label="Dismiss">
+        ×
+      </button>
+      <p className="intro-lead">
+        <strong>AutoHarm invents chord progressions and plays them for you</strong> — through its
+        built-in sound, or as live MIDI into any DAW (Ableton, Logic, GarageBand…). Great for
+        sketching harmony, beating writer's block, or generating parts to record.
+      </p>
+      <ol className="intro-steps">
+        <li>
+          <span className="step-n">1</span>
+          <span>
+            <b>Shape a vibe.</b> Pick a Seed chord &amp; Key, then turn the dials — Color
+            (folk→jazz), Adventure (safe→surprising), Gravity (pull to home).
+          </span>
+        </li>
+        <li>
+          <span className="step-n">2</span>
+          <span>
+            <b>Press Play.</b> It walks a chord progression in time. You'll hear the built-in synth
+            immediately.
+          </span>
+        </li>
+        <li>
+          <span className="step-n">3</span>
+          <span>
+            <b>Send it out.</b> Connect a MIDI port to record into your DAW live, or hit
+            <b> Export .mid</b> to save the take as a file. See the DAW setup guide.
+          </span>
+        </li>
+      </ol>
+    </div>
+  )
+}
+
 export default function App() {
   const s = useStore()
 
@@ -48,8 +102,12 @@ export default function App() {
     <main className="app">
       <header className="app-header">
         <h1>AutoHarm</h1>
-        <span className="tagline">generative chord instrument — Markov corpus blend, DAW-agnostic via MIDI</span>
+        <span className="tagline">
+          a chord-progression generator that plays into any DAW over MIDI
+        </span>
       </header>
+
+      <IntroCard />
 
       <div className="status-line">
         <span className={`status-badge${s.playing ? ' playing' : ''}`}>{s.status}</span>
@@ -65,6 +123,7 @@ export default function App() {
 
       <section className="panel">
         <h2>Transport</h2>
+        <p className="panel-sub">Start &amp; stop, set the tempo, and shape the phrasing.</p>
         <div className="transport">
           <button
             className="primary"
@@ -126,6 +185,7 @@ export default function App() {
 
       <section className="panel">
         <h2>Generator</h2>
+        <p className="panel-sub">Chooses <em>which</em> chord comes next. Start here — Seed, Key, and the dials.</p>
         <div className="row">
           <div className="control">
             <label>Model</label>
@@ -200,6 +260,7 @@ export default function App() {
 
       <section className="panel">
         <h2>Voicing</h2>
+        <p className="panel-sub">Shapes <em>how</em> each chord is played — register, richness, added harmony.</p>
         <div className="row">
           <Dial label="Voicing ladder" value={s.voicingLevel} onChange={s.setVoicingLevel} />
           <Dial
@@ -226,6 +287,7 @@ export default function App() {
 
       <section className="panel">
         <h2>Output</h2>
+        <p className="panel-sub">What's playing right now. Each Play captures a take you can export.</p>
         <div className="chord-display">
           <span className="symbol">{s.currentChord}</span>
           <span className="notes">
@@ -241,14 +303,20 @@ export default function App() {
           <button onClick={s.exportMidi} disabled={s.recordedCount === 0}>
             ⬇ Export .mid
           </button>
+          <button onClick={s.clearTake} disabled={s.recordedCount === 0}>
+            Clear take
+          </button>
           <span className="readout">
-            {s.recordedCount > 0 ? `${s.recordedCount} chord${s.recordedCount === 1 ? '' : 's'} captured this take` : 'play to capture a take'}
+            {s.recordedCount > 0
+              ? `${s.recordedCount} chord${s.recordedCount === 1 ? '' : 's'} captured this take`
+              : 'press Play to capture a take'}
           </span>
         </div>
       </section>
 
       <section className="panel">
         <h2>Connections</h2>
+        <p className="panel-sub">Route MIDI to your DAW (via an IAC / loopMIDI port) and toggle the preview synth.</p>
         <div className="row">
           {!s.midiEnabled && s.midiSupported && (
             <button className="primary" onClick={() => void s.enableMidi()}>

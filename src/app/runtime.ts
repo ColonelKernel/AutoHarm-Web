@@ -37,6 +37,7 @@ export class Runtime {
 
   // --- MIDI recording (for .mid export) ---
   private currentBeat = -1 // monotonic beat counter within the current take
+  private recordBase = 0 // beat offset so a cleared/rebased take starts at 0
   private recorded: ChordEvent[] = [] // voiced chords captured while playing
   /** Called when the recording gains its first chord (UI enables Export). */
   onRecordingChanged: ((count: number) => void) | null = null
@@ -178,6 +179,7 @@ export class Runtime {
   /** Reset the beat counter + recording at the start of a take. */
   private beginTake(): void {
     this.currentBeat = -1
+    this.recordBase = 0
     this.recorded = []
     this.onRecordingChanged?.(0)
   }
@@ -185,9 +187,17 @@ export class Runtime {
   /** Record a voiced chord (or a silence boundary) at the current take beat. */
   private record(notes: number[], velocity: number): void {
     if (this.recorded.length >= MAX_RECORDED_EVENTS) return
-    const beat = Math.max(0, this.currentBeat)
+    const beat = Math.max(0, this.currentBeat - this.recordBase)
     this.recorded.push({ startBeat: beat, notes: [...notes], velocity })
     this.onRecordingChanged?.(this.recorded.filter((c) => c.notes.length > 0).length)
+  }
+
+  /** Discard the captured take. If cleared mid-playback, rebase so the take
+   * continues cleanly from beat 0 rather than leaving a long leading gap. */
+  clearRecording(): void {
+    this.recorded = []
+    this.recordBase = this.currentBeat + 1
+    this.onRecordingChanged?.(0)
   }
 
   /** Whether there's a sounding progression available to export. */

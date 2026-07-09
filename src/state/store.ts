@@ -77,6 +77,7 @@ interface AppState {
   panic(): void
   audition(): void
   exportMidi(): void
+  clearTake(): void
   setBpm(v: number): void
   setClockSource(src: 'internal' | 'external'): void
   setColor(v: number): void
@@ -283,6 +284,11 @@ export const useStore = create<AppState>((set, get) => ({
     }
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
     downloadBytes(bytes, `autoharm-${stamp}.mid`, 'audio/midi')
+  },
+
+  clearTake() {
+    getRuntime().clearRecording()
+    set({ recordedCount: 0, history: [], lastError: null })
   },
 
   setBpm(v) {
