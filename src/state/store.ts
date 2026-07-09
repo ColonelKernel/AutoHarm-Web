@@ -23,6 +23,8 @@ interface AppState {
   history: HistoryEntry[]
   playing: boolean
   bpm: number
+  clockSource: 'internal' | 'external'
+  externalBpm: number | null
 
   // generator dials
   color: number
@@ -73,6 +75,7 @@ interface AppState {
   panic(): void
   audition(): void
   setBpm(v: number): void
+  setClockSource(src: 'internal' | 'external'): void
   setColor(v: number): void
   setAdventure(v: number): void
   setSpice(v: number): void
@@ -113,6 +116,8 @@ export const useStore = create<AppState>((set, get) => ({
   history: [],
   playing: false,
   bpm: 120,
+  clockSource: 'internal',
+  externalBpm: null,
 
   color: 0.5,
   adventure: 0.35,
@@ -185,6 +190,9 @@ export const useStore = create<AppState>((set, get) => ({
           break
         case 'error':
           set({ lastError: e.detail ? `${e.code}: ${e.detail}` : e.code })
+          break
+        case 'tempo':
+          set({ externalBpm: e.bpm })
           break
       }
     })
@@ -265,6 +273,12 @@ export const useStore = create<AppState>((set, get) => ({
     const bpm = Math.max(40, Math.min(240, Math.round(v)))
     getRuntime().setBpm(bpm) // applied now, or when the clock is first created
     set({ bpm })
+  },
+
+  setClockSource(src) {
+    getRuntime().setClockSource(src)
+    // Leaving external mode stops the DAW-driven walk; reflect that.
+    set({ clockSource: src, playing: false, externalBpm: src === 'external' ? get().externalBpm : null })
   },
 
   setColor(v) {

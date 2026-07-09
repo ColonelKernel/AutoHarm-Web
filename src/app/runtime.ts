@@ -29,6 +29,8 @@ export class Runtime {
   synth: PreviewSynth | null = null
   private loaded = false
   private bpm = 120 // last requested tempo, applied to the clock when it exists
+  clockSource: 'internal' | 'external' = 'internal'
+  private externalBpm: number | null = null
 
   /** Fetch corpora and build the engine graph (no AudioContext needed). */
   async load(): Promise<void> {
@@ -60,7 +62,53 @@ export class Runtime {
     // MIDI input: notes seed the chain; pads/CC drive the performance map.
     this.midi.onNoteIn = (note, vel) => this.player.noteIn(note, vel)
 
+    // External MIDI clock: when the clock source is 'external', the DAW's
+    // transport drives everything — Start begins the walk, each 24th pulse is a
+    // beat, Stop halts. The internal lookahead clock is idle in this mode.
+    this.midi.onClockStart = () => {
+      if (this.clockSource !== 'external') return
+      this.ensureAudio()
+      this.player.start()
+    }
+    this.midi.onClockContinue = () => {
+      if (this.clockSource !== 'external') return
+      this.ensureAudio()
+      if (!this.player.player.active) this.player.start()
+    }
+    this.midi.onClockStop = () => {
+      if (this.clockSource !== 'external') return
+      this.player.stop('stopped')
+      this.midi.allNotesOff()
+    }
+    this.midi.onClockBeat = () => {
+      if (this.clockSource !== 'external' || !this.player.player.active) return
+      // Reactive clock: schedule the chord a hair ahead of now so Web Audio /
+      // Web MIDI don't get a start-in-the-past.
+      const at = this.ctx ? this.ctx.currentTime + 0.005 : undefined
+      this.player.onBeat(at)
+    }
+    this.midi.onClockTempo = (bpm) => {
+      if (this.clockSource !== 'external') return
+      this.externalBpm = bpm
+      this.emitter.emit({ type: 'tempo', bpm })
+    }
+
     this.loaded = true
+  }
+
+  /** Follow the DAW's MIDI clock ('external') or the internal clock. */
+  setClockSource(src: 'internal' | 'external'): void {
+    this.clockSource = src
+    if (src === 'external') {
+      // Hand transport to the DAW: stop the internal clock and any in-flight
+      // playback so a clean Start/beat stream takes over.
+      this.clock?.stop()
+      this.stopTransport()
+    }
+  }
+
+  get externalTempo(): number | null {
+    return this.externalBpm
   }
 
   /** Set the transport tempo. Remembered even before the clock exists, so a
@@ -87,7 +135,9 @@ export class Runtime {
   startTransport(): void {
     this.ensureAudio()
     this.player.start()
-    this.clock!.start()
+    // In external mode the DAW's MIDI clock drives beats; leave the internal
+    // clock idle so the two don't compete.
+    if (this.clockSource === 'internal') this.clock!.start()
   }
 
   stopTransport(): void {

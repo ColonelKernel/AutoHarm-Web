@@ -50,10 +50,23 @@ input) works the same way.
 - **Key transposition** — change **Key** to e.g. E major; the progression
   transposes by harmonic function.
 
+## Follow the DAW's tempo (MIDI clock)
+
+AutoHarm can slave to your DAW's transport instead of running its own clock:
+
+1. Enable **MIDI clock / sync output** in your DAW and point it at the same
+   virtual port (IAC / loopMIDI). In Ableton: Preferences → Link/Tempo/MIDI →
+   set the port's **Sync** output on.
+2. In AutoHarm, set **MIDI in** (Connections) to that port and switch **Clock**
+   (Transport) to **External (MIDI)**. The Play button is now driven by the DAW.
+3. Press Play in the DAW. AutoHarm starts on the DAW's transport, advances one
+   chord per beat per the Rhythm dial, follows tempo changes, and stops when the
+   DAW stops. The BPM field shows the detected incoming tempo.
+
 ## Tips
 
-- **Tempo sync**: set AutoHarm's BPM to match your DAW. (Clock-follow from the
-  DAW via MIDI clock is a planned enhancement.)
+- **Tempo sync**: with **Clock = Internal**, match AutoHarm's BPM to your DAW by
+  hand; with **Clock = External (MIDI)** it follows the DAW automatically (above).
 - **Latency**: the internal preview and MIDI out are scheduled from the same
   lookahead clock; if the DAW adds monitoring latency, prefer recording and
   nudging, or mute the preview synth and monitor through the DAW.

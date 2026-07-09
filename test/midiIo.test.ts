@@ -25,12 +25,25 @@ class FakeOutput {
   }
 }
 
+class FakeInput {
+  onmidimessage: ((e: { data: Uint8Array; timeStamp: number }) => void) | null = null
+  constructor(
+    public id: string,
+    public name: string,
+  ) {}
+  /** Simulate a MIDI message arriving at time `t` (ms). */
+  emit(bytes: number[], t = 0) {
+    this.onmidimessage?.({ data: Uint8Array.from(bytes), timeStamp: t })
+  }
+}
+
 class FakeAccess {
   outputs: Map<string, FakeOutput>
-  inputs = new Map()
+  inputs: Map<string, FakeInput>
   onstatechange: (() => void) | null = null
-  constructor(outs: FakeOutput[]) {
+  constructor(outs: FakeOutput[], ins: FakeInput[] = []) {
     this.outputs = new Map(outs.map((o) => [o.id, o]))
+    this.inputs = new Map(ins.map((i) => [i.id, i]))
   }
 }
 
@@ -39,11 +52,13 @@ const NOTE_OFF = 0x80
 
 let outA: FakeOutput
 let outB: FakeOutput
+let inClock: FakeInput
 
 beforeEach(() => {
   outA = new FakeOutput('a', 'Bus A')
   outB = new FakeOutput('b', 'Bus B')
-  const access = new FakeAccess([outA, outB])
+  inClock = new FakeInput('clk', 'DAW Clock')
+  const access = new FakeAccess([outA, outB], [inClock])
   vi.stubGlobal('navigator', { requestMIDIAccess: async () => access })
 })
 
@@ -104,5 +119,69 @@ describe('steady-state note handling', () => {
     io.playChord([62, 65, 69], 90, 2000) // new chord: offs for the old, ons for the new
     const offs = outA.sent.filter((s) => (s.msg[0] & 0xf0) === NOTE_OFF)
     expect(offs.map((s) => s.msg[1]).sort()).toEqual([60, 64, 67])
+  })
+})
+
+describe('MIDI clock (external transport)', () => {
+  async function makeClockIO() {
+    const io = new MidiIO()
+    await io.init()
+    io.selectInput('clk')
+    return io
+  }
+
+  it('fires a beat every 24 pulses, with beat 0 aligned to the first pulse', async () => {
+    const io = await makeClockIO()
+    let beats = 0
+    io.onClockBeat = () => beats++
+    inClock.emit([0xfa]) // Start (reset)
+    for (let i = 0; i < 48; i++) inClock.emit([0xf8], i * 20)
+    // pulses 0 and 24 are beat boundaries -> 2 beats over 48 pulses
+    expect(beats).toBe(2)
+  })
+
+  it('Start resets the pulse counter so beats realign', async () => {
+    const io = await makeClockIO()
+    const beatPulses: number[] = []
+    let pulse = 0
+    io.onClockBeat = () => beatPulses.push(pulse)
+    inClock.emit([0xfa])
+    for (let i = 0; i < 12; i++) { inClock.emit([0xf8], i); pulse++ }
+    inClock.emit([0xfa]) // restart mid-bar
+    pulse = 0
+    for (let i = 0; i < 24; i++) { inClock.emit([0xf8], i); pulse++ }
+    // beats fire at pulse 0 (first bar), then pulse 0 again after restart
+    expect(beatPulses).toEqual([0, 0])
+  })
+
+  it('routes Start / Continue / Stop callbacks', async () => {
+    const io = await makeClockIO()
+    const calls: string[] = []
+    io.onClockStart = () => calls.push('start')
+    io.onClockContinue = () => calls.push('continue')
+    io.onClockStop = () => calls.push('stop')
+    inClock.emit([0xfa])
+    inClock.emit([0xfb])
+    inClock.emit([0xfc])
+    expect(calls).toEqual(['start', 'continue', 'stop'])
+  })
+
+  it('estimates BPM from pulse spacing (20.833 ms/pulse = 120 BPM)', async () => {
+    const io = await makeClockIO()
+    let lastBpm = 0
+    io.onClockTempo = (bpm) => (lastBpm = bpm)
+    inClock.emit([0xfa])
+    // 120 BPM => 0.5 s per beat / 24 = 20.8333 ms per pulse.
+    const ms = 500 / 24
+    for (let i = 0; i < 30; i++) inClock.emit([0xf8], i * ms)
+    expect(lastBpm).toBeCloseTo(120, 1)
+  })
+
+  it('does not treat 0xF8 as a note (system-realtime is not channel-voice)', async () => {
+    const io = await makeClockIO()
+    let noteIns = 0
+    io.onNoteIn = () => noteIns++
+    for (let i = 0; i < 10; i++) inClock.emit([0xf8], i)
+    expect(noteIns).toBe(0)
   })
 })

@@ -9,6 +9,7 @@ export type PlayerEvent =
   | { type: 'playoff' }
   | { type: 'error'; code: string; detail?: string }
   | { type: 'readout'; key: string; value: string | number }
+  | { type: 'tempo'; bpm: number } // external MIDI-clock tempo estimate
   | { type: 'log'; message: string }
 
 export type PlayerEventListener = (e: PlayerEvent) => void

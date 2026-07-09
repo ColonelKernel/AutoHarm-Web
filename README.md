@@ -42,6 +42,9 @@ MIDI setup and an end-to-end test.
   extensions), and Harmony-Singer-style diatonic added voices.
 - **Auto-player** — walks the chain over harmonic-rhythm templates with
   loop / regen / one-shot phrase modes, hold (vamp), and reroll.
+- **Transport** — an internal Web Worker lookahead clock, or **external MIDI
+  clock** to slave to the DAW's tempo/transport (Clock → External; follows
+  0xFA/0xFB/0xFC + 24 PPQN and shows the detected BPM).
 - **MIDI in** — a connected keyboard seeds the chain (played note → chord root);
   MPK-style program-change pads and CC control transport and dials.
 
@@ -114,3 +117,7 @@ python3 tools/export_onnx.py            # -> public/data/jazznet/{vocab.json,rnn
 subpath (GitHub Pages included). The ORT wasm is self-hosted under `public/ort/`
 and served verbatim in dev and build; the neural `.onnx` graphs and wasm are
 lazy-loaded only when a neural model is selected.
+
+Pushing to `main` triggers [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml),
+which runs `npm ci`, builds, runs the test suite, and publishes `dist/` to
+GitHub Pages. Enable it once under **Settings → Pages → Source: GitHub Actions**.

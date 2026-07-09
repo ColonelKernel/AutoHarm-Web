@@ -66,7 +66,12 @@ export default function App() {
       <section className="panel">
         <h2>Transport</h2>
         <div className="transport">
-          <button className="primary" onClick={s.togglePlay} disabled={!s.loaded}>
+          <button
+            className="primary"
+            onClick={s.togglePlay}
+            disabled={!s.loaded || s.clockSource === 'external'}
+            title={s.clockSource === 'external' ? 'Driven by the DAW’s MIDI clock' : undefined}
+          >
             {s.playing ? '■ Stop' : '▶ Play'}
           </button>
           <button onClick={s.reroll} disabled={!s.playing}>Reroll</button>
@@ -75,14 +80,29 @@ export default function App() {
           </button>
           <button className="danger" onClick={s.panic}>Panic</button>
           <div className="control">
-            <label>BPM</label>
-            <input
-              type="number"
-              min={40}
-              max={240}
-              value={s.bpm}
-              onChange={(e) => s.setBpm(Number(e.target.value))}
-            />
+            <label>Clock</label>
+            <select value={s.clockSource} onChange={(e) => s.setClockSource(e.target.value as 'internal' | 'external')}>
+              <option value="internal">Internal</option>
+              <option value="external">External (MIDI)</option>
+            </select>
+          </div>
+          <div className="control">
+            <label>BPM{s.clockSource === 'external' ? ' (from DAW)' : ''}</label>
+            {s.clockSource === 'external' ? (
+              <input
+                type="text"
+                readOnly
+                value={s.externalBpm ? `${s.externalBpm.toFixed(1)} ♪` : 'waiting for clock…'}
+              />
+            ) : (
+              <input
+                type="number"
+                min={40}
+                max={240}
+                value={s.bpm}
+                onChange={(e) => s.setBpm(Number(e.target.value))}
+              />
+            )}
           </div>
           <div className="control">
             <label>Phrase mode</label>
