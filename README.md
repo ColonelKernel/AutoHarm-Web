@@ -47,6 +47,9 @@ MIDI setup and an end-to-end test.
   0xFA/0xFB/0xFC + 24 PPQN and shows the detected BPM).
 - **MIDI in** — a connected keyboard seeds the chain (played note → chord root);
   MPK-style program-change pads and CC control transport and dials.
+- **MIDI file export** — each take is captured as it plays (actual voiced notes,
+  on the beat grid); **Export .mid** downloads a Standard MIDI File (format 0)
+  to drag into any DAW.
 
 ## Quick start
 

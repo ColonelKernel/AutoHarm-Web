@@ -63,6 +63,14 @@ AutoHarm can slave to your DAW's transport instead of running its own clock:
    chord per beat per the Rhythm dial, follows tempo changes, and stops when the
    DAW stops. The BPM field shows the detected incoming tempo.
 
+## Export a take as a MIDI file
+
+Prefer to drag a clip in instead of recording live? Every time you press Play,
+AutoHarm captures the voiced progression (the actual notes, on the beat grid).
+After stopping, click **Export .mid** (Output panel) to download a Standard MIDI
+File and drag it onto a track in any DAW. The file carries the tempo, so it
+lands in time; each Play starts a fresh take.
+
 ## Tips
 
 - **Tempo sync**: with **Clock = Internal**, match AutoHarm's BPM to your DAW by

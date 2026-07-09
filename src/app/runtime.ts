@@ -15,6 +15,9 @@ import { mulberry32, randomSeed } from '../engine/random'
 import { LookaheadClock } from '../io/clock'
 import { PreviewSynth } from '../io/synth'
 import { MidiIO } from '../io/midi'
+import { writeSmf, hasNotes, type ChordEvent } from '../io/smf'
+
+const MAX_RECORDED_EVENTS = 8192 // backstop for very long loop takes
 
 export class Runtime {
   readonly emitter = new Emitter()
@@ -32,6 +35,12 @@ export class Runtime {
   clockSource: 'internal' | 'external' = 'internal'
   private externalBpm: number | null = null
 
+  // --- MIDI recording (for .mid export) ---
+  private currentBeat = -1 // monotonic beat counter within the current take
+  private recorded: ChordEvent[] = [] // voiced chords captured while playing
+  /** Called when the recording gains its first chord (UI enables Export). */
+  onRecordingChanged: ((count: number) => void) | null = null
+
   /** Fetch corpora and build the engine graph (no AudioContext needed). */
   async load(): Promise<void> {
     if (this.loaded) return
@@ -46,14 +55,19 @@ export class Runtime {
     this.player = new AutoPlayer(this.registry, this.sonifier, this.emitter)
     this.player.onKeyChange = (k) => this.markov.setKey(k)
 
-    // Engine note/stop events -> audio + MIDI sinks.
+    // Engine note/stop events -> audio + MIDI sinks (+ the recorder).
     this.emitter.on((e) => {
       if (e.type === 'notes') {
         this.synth?.playChord(e.notes, e.velocity, e.at)
         this.midi.playChord(e.notes, e.velocity, this.audioTimeToMidiTs(e.at))
+        // Capture only auto-play notes (not manual auditions) at the take beat.
+        if (this.player.player.active) this.record(e.notes, e.velocity)
       } else if (e.type === 'stop') {
         this.synth?.releaseAll(e.at)
         this.midi.releaseAll(this.audioTimeToMidiTs(e.at))
+        // A 'stop' while still active is an N.C. silence boundary; a transport
+        // stop fires 'stop' AFTER active is cleared, so it is (correctly) skipped.
+        if (this.player.player.active) this.record([], 0)
       } else if (e.type === 'playoff') {
         this.clock?.stop()
       }
@@ -68,12 +82,16 @@ export class Runtime {
     this.midi.onClockStart = () => {
       if (this.clockSource !== 'external') return
       this.ensureAudio()
+      this.beginTake()
       this.player.start()
     }
     this.midi.onClockContinue = () => {
       if (this.clockSource !== 'external') return
       this.ensureAudio()
-      if (!this.player.player.active) this.player.start()
+      if (!this.player.player.active) {
+        this.beginTake()
+        this.player.start()
+      }
     }
     this.midi.onClockStop = () => {
       if (this.clockSource !== 'external') return
@@ -82,6 +100,7 @@ export class Runtime {
     }
     this.midi.onClockBeat = () => {
       if (this.clockSource !== 'external' || !this.player.player.active) return
+      this.currentBeat += 1
       // Reactive clock: schedule the chord a hair ahead of now so Web Audio /
       // Web MIDI don't get a start-in-the-past.
       const at = this.ctx ? this.ctx.currentTime + 0.005 : undefined
@@ -124,6 +143,7 @@ export class Runtime {
       this.ctx = new AudioContext()
       this.synth = new PreviewSynth(this.ctx)
       this.clock = new LookaheadClock(this.ctx, (_beat, atTime) => {
+        this.currentBeat += 1 // monotonic beat index for the recorder
         this.player.onBeat(atTime)
       })
       this.clock.bpm = this.bpm // apply any tempo chosen before first Play
@@ -134,6 +154,7 @@ export class Runtime {
 
   startTransport(): void {
     this.ensureAudio()
+    this.beginTake()
     this.player.start()
     // In external mode the DAW's MIDI clock drives beats; leave the internal
     // clock idle so the two don't compete.
@@ -150,6 +171,35 @@ export class Runtime {
     this.player.panic()
     this.midi.allNotesOff()
     this.synth?.releaseAll()
+  }
+
+  // --- recording / export ---------------------------------------------------
+
+  /** Reset the beat counter + recording at the start of a take. */
+  private beginTake(): void {
+    this.currentBeat = -1
+    this.recorded = []
+    this.onRecordingChanged?.(0)
+  }
+
+  /** Record a voiced chord (or a silence boundary) at the current take beat. */
+  private record(notes: number[], velocity: number): void {
+    if (this.recorded.length >= MAX_RECORDED_EVENTS) return
+    const beat = Math.max(0, this.currentBeat)
+    this.recorded.push({ startBeat: beat, notes: [...notes], velocity })
+    this.onRecordingChanged?.(this.recorded.filter((c) => c.notes.length > 0).length)
+  }
+
+  /** Whether there's a sounding progression available to export. */
+  hasRecording(): boolean {
+    return hasNotes(this.recorded)
+  }
+
+  /** Serialize the current recording to Standard MIDI File bytes (or null). */
+  exportMidi(): Uint8Array | null {
+    if (!hasNotes(this.recorded)) return null
+    const bpm = this.clockSource === 'external' ? (this.externalBpm ?? 120) : this.bpm
+    return writeSmf(this.recorded, { bpm })
   }
 
   /** AudioContext seconds -> Web MIDI DOMHighResTimeStamp (ms). */

@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import { getRuntime } from '../app/runtime'
 import { decodePgm, ccToParam, MODES, SEED_LIST, KEY_ROOTS, type PlayerMode } from '../engine/voicing/performanceMap'
 import { MidiIO, type MidiPortInfo } from '../io/midi'
+import { downloadBytes } from '../io/download'
 import type { ModelName, SessionMode } from '../engine/markov/config'
 
 export interface HistoryEntry {
@@ -25,6 +26,7 @@ interface AppState {
   bpm: number
   clockSource: 'internal' | 'external'
   externalBpm: number | null
+  recordedCount: number // sounding chords captured in the current take
 
   // generator dials
   color: number
@@ -74,6 +76,7 @@ interface AppState {
   reroll(): void
   panic(): void
   audition(): void
+  exportMidi(): void
   setBpm(v: number): void
   setClockSource(src: 'internal' | 'external'): void
   setColor(v: number): void
@@ -118,6 +121,7 @@ export const useStore = create<AppState>((set, get) => ({
   bpm: 120,
   clockSource: 'internal',
   externalBpm: null,
+  recordedCount: 0,
 
   color: 0.5,
   adventure: 0.35,
@@ -197,6 +201,8 @@ export const useStore = create<AppState>((set, get) => ({
       }
     })
 
+    rt.onRecordingChanged = (count) => set({ recordedCount: count })
+
     rt.midi.onPortsChanged = () => {
       set({ midiOutputs: rt.midi.outputs(), midiInputs: rt.midi.inputs() })
     }
@@ -267,6 +273,16 @@ export const useStore = create<AppState>((set, get) => ({
     const rt = getRuntime()
     rt.ensureAudio()
     rt.player.audition()
+  },
+
+  exportMidi() {
+    const bytes = getRuntime().exportMidi()
+    if (!bytes) {
+      set({ lastError: 'nothing to export yet — play a progression first' })
+      return
+    }
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+    downloadBytes(bytes, `autoharm-${stamp}.mid`, 'audio/midi')
   },
 
   setBpm(v) {

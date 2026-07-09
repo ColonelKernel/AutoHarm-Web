@@ -237,6 +237,14 @@ export default function App() {
             <span className="chip" key={h.at}>{h.symbol}</span>
           ))}
         </div>
+        <div className="transport" style={{ marginTop: 12 }}>
+          <button onClick={s.exportMidi} disabled={s.recordedCount === 0}>
+            ⬇ Export .mid
+          </button>
+          <span className="readout">
+            {s.recordedCount > 0 ? `${s.recordedCount} chord${s.recordedCount === 1 ? '' : 's'} captured this take` : 'play to capture a take'}
+          </span>
+        </div>
       </section>
 
       <section className="panel">
