@@ -29,9 +29,10 @@ body {
 
 .app-header {
   display: flex;
-  align-items: baseline;
-  gap: 16px;
-  margin-bottom: 4px;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .app-header h1 {
@@ -40,7 +41,142 @@ body {
   margin: 0;
 }
 
-.app-header .tagline { color: var(--muted); font-size: 13px; }
+.header-status {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.control.compact { min-width: 64px; }
+.control.compact select, .control.compact input { padding: 4px 6px; font-size: 12.5px; max-width: 90px; }
+
+/* App mode tabs */
+.mode-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--panel-2);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+.mode-tab {
+  border: none;
+  background: transparent;
+  padding: 7px 18px;
+  font-size: 13px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-radius: 7px;
+}
+
+.mode-tab.active {
+  background: var(--accent);
+  color: #0b0d10;
+  font-weight: 700;
+}
+
+.view-toggle { display: flex; gap: 4px; }
+.view-toggle button { padding: 4px 12px; font-size: 12px; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.panel-head h2 { margin: 0; }
+
+/* Primary action row above the timeline */
+.action-bar {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+/* Chord timeline */
+.chord-timeline {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+
+.timeline-empty { color: var(--muted); font-size: 14px; padding: 18px 4px; }
+
+.chord-card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: center;
+  min-width: 118px;
+  padding: 10px 10px 8px;
+  background: var(--panel-2);
+  border: 2px solid #2c3140;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.chord-card.selected { border-color: var(--accent); }
+.chord-card.playing { box-shadow: 0 0 10px #4fc3f755; border-color: var(--accent); }
+.chord-card.locked { border-style: solid; border-color: var(--accent-2); background: #2a2618; }
+.chord-card.locked.playing { box-shadow: 0 0 10px #ffb74d66; }
+
+.cc-roman {
+  font-size: 13px;
+  color: var(--accent-2);
+  min-height: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-roman-only { font-size: 24px; font-weight: 700; color: var(--accent); padding: 4px 0; }
+
+.cc-symbol {
+  background: transparent;
+  border: 1px dashed transparent;
+  font-size: 21px;
+  font-weight: 700;
+  color: var(--text);
+  padding: 2px 8px;
+}
+.cc-symbol:hover { border-color: #4a5164; background: transparent; }
+
+.cc-symbol-input {
+  width: 92px;
+  font-size: 17px;
+  font-weight: 700;
+  text-align: center;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 3px 4px;
+}
+
+.cc-duration {
+  font-size: 11.5px;
+  padding: 2px 4px !important;
+  color: var(--muted);
+}
+
+.cc-actions { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+
+.cc-actions button {
+  padding: 3px 6px;
+  font-size: 12px;
+  border-radius: 6px;
+  border-color: transparent;
+  background: transparent;
+  line-height: 1.2;
+}
+.cc-actions button:hover { background: #363c4e; }
+.cc-actions button.active { color: var(--accent-2); }
+.cc-actions button:disabled { opacity: 0.3; }
 
 .status-line {
   display: flex;

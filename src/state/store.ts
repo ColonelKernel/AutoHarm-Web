@@ -14,6 +14,19 @@ import {
 } from '../engine/player/templates'
 import { swingLabel, DEFAULT_SWING_UNIT, type SwingUnit } from '../engine/player/swing'
 import { makeProgression, type Progression } from '../engine/progression/types'
+import {
+  duplicate as opDuplicate,
+  move as opMove,
+  remove as opRemove,
+  replaceSymbol as opReplaceSymbol,
+  setDuration as opSetDuration,
+  toggleLock as opToggleLock,
+} from '../engine/progression/operations'
+import { ProgressionHistory } from '../engine/progression/history'
+
+export type AppMode = 'generate' | 'respond' | 'perform'
+export type ViewMode = 'quick' | 'lab'
+export type DisplayMode = 'symbols' | 'roman' | 'both'
 import { MidiIO, type MidiPortInfo } from '../io/midi'
 import { downloadBytes } from '../io/download'
 import type { ModelName, SessionMode } from '../engine/markov/config'
@@ -41,6 +54,12 @@ interface AppState {
   progression: Progression
   playingSlotId: string | null // slot currently sounding (timeline highlight)
   generating: boolean
+  appMode: AppMode
+  viewMode: ViewMode
+  displayMode: DisplayMode
+  selectedSlotId: string | null
+  canUndo: boolean
+  canRedo: boolean
 
   // generator dials
   color: number
@@ -94,6 +113,20 @@ interface AppState {
   togglePlay(): void
   generateNew(): Promise<void>
   reroll(): void
+  setAppMode(m: AppMode): void
+  setViewMode(v: ViewMode): void
+  setDisplayMode(d: DisplayMode): void
+  selectSlot(id: string | null): void
+  editSlotSymbol(id: string, symbol: string): void
+  toggleSlotLock(id: string): void
+  setSlotDuration(id: string, steps: number): void
+  moveSlot(id: string, dir: -1 | 1): void
+  deleteSlot(id: string): void
+  duplicateSlot(id: string): void
+  rerollSlot(id: string): Promise<void>
+  auditionSlot(id: string): void
+  undo(): void
+  redo(): void
   panic(): void
   audition(): void
   exportMidi(): void
@@ -132,6 +165,26 @@ interface AppState {
 let historySeq = 0
 let initStarted = false
 
+/** Bounded undo history for progression edits (never transport/IO state). */
+const editHistory = new ProgressionHistory(100)
+
+type SetFn = (partial: Partial<AppState>) => void
+type GetFn = () => AppState
+
+/** Apply a pure progression op: record history, update the store NOW (the
+ * user sees their edit immediately), and hand it to playback — structural
+ * edits land on the next bar downbeat while playing. */
+function applyEdit(set: SetFn, get: GetFn, op: (p: Progression) => Progression, structural: boolean): void {
+  const cur = get().progression
+  const next = op(cur)
+  if (next === cur) return // invalid/no-op edits don't pollute history
+  editHistory.push(cur)
+  // Store FIRST: the runtime echoes progressionApplied synchronously, and the
+  // event handler must see the same object (identity) to know it's an echo.
+  set({ progression: next, canUndo: editHistory.canUndo, canRedo: editHistory.canRedo })
+  getRuntime().applyEdit(next, structural)
+}
+
 export const useStore = create<AppState>((set, get) => ({
   loaded: false,
   loadError: null,
@@ -149,6 +202,12 @@ export const useStore = create<AppState>((set, get) => ({
   progression: makeProgression([]),
   playingSlotId: null,
   generating: false,
+  appMode: 'generate',
+  viewMode: 'quick',
+  displayMode: 'both',
+  selectedSlotId: null,
+  canUndo: false,
+  canRedo: false,
 
   color: 0.5,
   adventure: 0.35,
@@ -231,9 +290,21 @@ export const useStore = create<AppState>((set, get) => ({
         case 'tempo':
           set({ externalBpm: e.bpm })
           break
-        case 'progressionApplied':
-          set({ progression: e.progression })
+        case 'progressionApplied': {
+          // Generation results / staged variations arrive here. User edits
+          // set the store synchronously and echo back the SAME object, so
+          // an identity match means nothing to record.
+          const cur = get().progression
+          if (e.progression !== cur) {
+            if (cur.slots.length > 0) editHistory.push(cur)
+            set({
+              progression: e.progression,
+              canUndo: editHistory.canUndo,
+              canRedo: editHistory.canRedo,
+            })
+          }
           break
+        }
         case 'slotOnset':
           set({ playingSlotId: e.slotId })
           break
@@ -305,6 +376,65 @@ export const useStore = create<AppState>((set, get) => ({
     set({ generating: true })
     await getRuntime().generateNew()
     set({ generating: false })
+  },
+
+  setAppMode(m) {
+    set({ appMode: m })
+  },
+  setViewMode(v) {
+    set({ viewMode: v })
+  },
+  setDisplayMode(d) {
+    set({ displayMode: d })
+  },
+  selectSlot(id) {
+    set({ selectedSlotId: id })
+  },
+
+  editSlotSymbol(id, symbol) {
+    applyEdit(set, get, (p) => opReplaceSymbol(p, id, symbol), false)
+  },
+  toggleSlotLock(id) {
+    applyEdit(set, get, (p) => opToggleLock(p, id), false)
+  },
+  setSlotDuration(id, steps) {
+    applyEdit(set, get, (p) => opSetDuration(p, id, steps), true)
+  },
+  moveSlot(id, dir) {
+    applyEdit(set, get, (p) => opMove(p, id, dir), true)
+  },
+  deleteSlot(id) {
+    if (get().selectedSlotId === id) set({ selectedSlotId: null })
+    applyEdit(set, get, (p) => opRemove(p, id), true)
+  },
+  duplicateSlot(id) {
+    applyEdit(set, get, (p) => opDuplicate(p, id), true)
+  },
+  async rerollSlot(id) {
+    set({ generating: true })
+    await getRuntime().rerollSlot(id)
+    set({ generating: false })
+  },
+  auditionSlot(id) {
+    const rt = getRuntime()
+    const slot = get().progression.slots.find((s) => s.id === id)
+    if (!slot) return
+    rt.ensureAudio()
+    rt.player.audition(slot.symbol)
+  },
+
+  undo() {
+    const prev = editHistory.undo(get().progression)
+    if (!prev) return
+    // Store first — the runtime's synchronous echo must match by identity.
+    set({ progression: prev, canUndo: editHistory.canUndo, canRedo: editHistory.canRedo })
+    getRuntime().applyEdit(prev, true)
+  },
+  redo() {
+    const next = editHistory.redo(get().progression)
+    if (!next) return
+    set({ progression: next, canUndo: editHistory.canUndo, canRedo: editHistory.canRedo })
+    getRuntime().applyEdit(next, true)
   },
 
   reroll() {

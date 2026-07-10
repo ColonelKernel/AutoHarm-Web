@@ -180,6 +180,41 @@ export class Runtime {
     return this.runGeneration(prior, chainTail(prior, this.seed))
   }
 
+  /** Regenerate ONE slot: everything else is mask-locked for the walk, then
+   * the user's real lock flags are restored. The slot's chain input is its
+   * predecessor, so the reroll is context-aware by construction. */
+  async rerollSlot(slotId: string): Promise<Progression | null> {
+    const cur = this.player.activeProgression
+    const idx = cur.slots.findIndex((s) => s.id === slotId)
+    if (idx < 0) return null
+    const masked: Progression = {
+      slots: cur.slots.map((s, i) => ({ ...s, locked: i !== idx })),
+      totalSteps: cur.totalSteps,
+    }
+    const explain = { blendProfile: this.blendProfile() }
+    const onsets: number[] = []
+    let step = 0
+    for (const s of cur.slots) {
+      onsets.push(step)
+      step += s.durationSteps
+    }
+    const p = await this.scheduler.run((isCancelled) =>
+      generateProgression(
+        this.registry,
+        { seed: chainTail(cur, this.seed), onsets, totalSteps: cur.totalSteps, prior: masked, explain, isCancelled },
+        this.emitter,
+      ),
+    )
+    if (!p) return null
+    const locks = new Map(cur.slots.map((s) => [s.id, s.locked]))
+    const fixed: Progression = {
+      slots: p.slots.map((s) => ({ ...s, locked: locks.get(s.id) ?? false })),
+      totalSteps: p.totalSteps,
+    }
+    this.player.setProgression(fixed, this.player.state.active ? 'cycle' : 'now')
+    return fixed
+  }
+
   private async runGeneration(prior: Progression | undefined, seed: string): Promise<Progression | null> {
     if (!this.loaded) return null
     const explain = { blendProfile: this.blendProfile() }
