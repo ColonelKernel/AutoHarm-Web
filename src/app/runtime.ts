@@ -569,6 +569,24 @@ export class Runtime {
     this.synth?.releaseAll()
   }
 
+  /** Send a short, safe C-major test chord to the selected MIDI out (and the
+   * preview synth), with a guaranteed release — no stuck-note gremlins.
+   * Returns a human report of exactly what was sent where. */
+  testConnection(outName: string | null): string {
+    this.ensureAudio()
+    const notes = [60, 64, 67]
+    this.synth?.playChord(notes, 90)
+    const sentMidi = this.midi.hasOutput
+    if (sentMidi) this.midi.playChord(notes, 90)
+    setTimeout(() => {
+      this.synth?.releaseAll()
+      this.midi.releaseAll()
+    }, 700)
+    if (sentMidi && outName) return `Sent C major to ${outName}`
+    if (sentMidi) return 'Sent C major to the selected MIDI output'
+    return 'Played C major on the preview synth — no MIDI output selected'
+  }
+
   // --- recording / export ---------------------------------------------------
 
   /** Reset the step counter + recording at the start of a take. */

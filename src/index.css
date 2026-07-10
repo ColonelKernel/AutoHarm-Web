@@ -269,6 +269,22 @@ body {
 
 button.big { font-size: 16px; padding: 12px 22px; }
 
+/* Connection chip (header) */
+.conn-chip {
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.conn-chip.ok { color: var(--ok); border-color: #2e5d3a; }
+
+/* Perform mode: large targets, minimal chrome */
+.perform-state { display: flex; align-items: center; gap: 18px; margin: 12px 0; flex-wrap: wrap; }
+.perform-chord { font-size: 44px; font-weight: 700; color: var(--accent); min-width: 140px; }
+.perform-actions { display: flex; gap: 14px; flex-wrap: wrap; margin: 16px 0; }
+.perform-actions .big { min-height: 56px; min-width: 130px; font-size: 17px; }
+.perform .chord-card { min-width: 132px; }
+
 /* Explanation panel */
 .explain {
   margin-top: 14px;
@@ -533,7 +549,13 @@ button:disabled { opacity: 0.45; cursor: default; }
   background: var(--panel-2);
   border: 1px solid #2c3140;
   transition: left 0.12s ease-out;
+  padding: 0;
+  cursor: default;
 }
+
+button.rg-cell { cursor: pointer; }
+button.rg-cell:hover { border-color: var(--accent); }
+button.rg-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 .rg-cell.beat { border-color: #3a4152; }
 .rg-cell.bar { border-color: #55617a; }

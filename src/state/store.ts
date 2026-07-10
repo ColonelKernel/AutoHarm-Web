@@ -29,6 +29,7 @@ import {
   type MacroState,
 } from '../engine/macros/mapping'
 import { presetById, surpriseMe, SURPRISE_ID, type MusicalPreset } from '../engine/macros/presets'
+import { CUSTOM_NAME, randomize as randomizeGrid, rotate as rotateGrid, toggleOnset } from '../engine/rhythm/customGrid'
 
 export type AppMode = 'generate' | 'respond' | 'perform'
 export type ViewMode = 'quick' | 'lab'
@@ -152,6 +153,12 @@ interface AppState {
   setRepetitions(n: number): void
   newListen(): void
   cancelListen(): void
+  toggleRhythmStep(step: number): void
+  rotateRhythm(dir: -1 | 1): void
+  randomizeRhythm(): void
+  resetRhythm(): void
+  testConnection(): void
+  testReport: string | null
   panic(): void
   audition(): void
   exportMidi(): void
@@ -195,6 +202,18 @@ const editHistory = new ProgressionHistory(100)
 
 type SetFn = (partial: Partial<AppState>) => void
 type GetFn = () => AppState
+
+/** Push an edited rhythm pattern to generation + display (marks Custom). */
+function applyPattern(set: SetFn, get: GetFn, pattern: { name: string; spanBars: number; onsets: number[] }): void {
+  getRuntime().setCustomPattern(pattern)
+  set({
+    rhythmName: pattern.name,
+    rhythmOnsets: pattern.onsets,
+    rhythmSteps: pattern.spanBars * STEPS_PER_BAR,
+    customMacros: { ...get().customMacros, motion: true },
+    activePresetId: null,
+  })
+}
 
 /** Apply a pure progression op: record history, update the store NOW (the
  * user sees their edit immediately), and hand it to playback — structural
@@ -243,6 +262,7 @@ export const useStore = create<AppState>((set, get) => ({
   respondPhase: 'idle',
   respondProgress: -1,
   respondRepsLeft: 0,
+  testReport: null,
 
   color: 0.5,
   adventure: 0.35,
@@ -563,6 +583,33 @@ export const useStore = create<AppState>((set, get) => ({
   cancelListen() {
     getRuntime().cancelListen()
     set({ respondPhase: 'idle', respondProgress: -1 })
+  },
+
+  toggleRhythmStep(step) {
+    const s = get()
+    const pattern = { name: s.rhythmName, spanBars: s.rhythmSteps / STEPS_PER_BAR, onsets: s.rhythmOnsets }
+    const next = toggleOnset(pattern, step)
+    if (next === pattern) return
+    applyPattern(set, get, next)
+  },
+  rotateRhythm(dir) {
+    const s = get()
+    applyPattern(set, get, rotateGrid({ name: CUSTOM_NAME, spanBars: s.rhythmSteps / STEPS_PER_BAR, onsets: s.rhythmOnsets }, dir))
+  },
+  randomizeRhythm() {
+    applyPattern(set, get, randomizeGrid(Math.random))
+  },
+  resetRhythm() {
+    getRuntime().setCustomPattern(null)
+    get().setRhythm(get().rhythm) // back to the dial's template
+  },
+
+  testConnection() {
+    const s = get()
+    const outName = s.midiOutputs.find((p) => p.id === s.midiOutId)?.name ?? null
+    const report = getRuntime().testConnection(outName)
+    set({ testReport: report })
+    setTimeout(() => set({ testReport: null }), 4000)
   },
 
   reroll() {

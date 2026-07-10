@@ -39,41 +39,78 @@ const CELL_PX = 15
 const GAP_PX = 3
 const PITCH_PX = CELL_PX + GAP_PX
 
-/** Rhythm pattern on its 16th-note grid, cells at their swung positions. */
+/** Rhythm pattern on its 16th-note grid, cells at their swung positions.
+ * With `onToggle` the grid is an EDITOR: each cell is a real button
+ * (keyboard + screen-reader operable), and the pattern it edits is the same
+ * one generation consumes. */
 function RhythmGrid({
   steps,
   onsets,
   swing,
   swingUnit,
+  onToggle,
 }: {
   steps: number
   onsets: number[]
   swing: number
   swingUnit: SwingUnit
+  onToggle?: (step: number) => void
 }) {
   const set = new Set(onsets)
   return (
     <div
       className="rhythm-grid"
-      style={{ width: steps * PITCH_PX + PITCH_PX, height: CELL_PX }}
+      role={onToggle ? 'group' : undefined}
+      style={{ width: steps * PITCH_PX + PITCH_PX, height: CELL_PX + (onToggle ? 4 : 0) }}
       aria-label={`rhythm pattern, ${onsets.length} chords per ${steps / 16} bar(s), swing ${swingLabel(swing)}`}
     >
       {Array.from({ length: steps }, (_, i) => {
         const delay = swingDelaySteps(i, swing, swingUnit)
-        return (
-          <span
+        const cls =
+          'rg-cell' +
+          (set.has(i) ? ' on' : '') +
+          (i % 4 === 0 ? ' beat' : '') +
+          (i % 16 === 0 ? ' bar' : '') +
+          (delay > 0 ? ' swung' : '')
+        return onToggle ? (
+          <button
             key={i}
+            type="button"
             style={{ left: (i + delay) * PITCH_PX }}
-            className={
-              'rg-cell' +
-              (set.has(i) ? ' on' : '') +
-              (i % 4 === 0 ? ' beat' : '') +
-              (i % 16 === 0 ? ' bar' : '') +
-              (delay > 0 ? ' swung' : '')
-            }
+            className={cls}
+            aria-pressed={set.has(i)}
+            aria-label={`Step ${i + 1}${set.has(i) ? ', chord onset' : ''}`}
+            onClick={() => onToggle(i)}
           />
+        ) : (
+          <span key={i} style={{ left: (i + delay) * PITCH_PX }} className={cls} />
         )
       })}
+    </div>
+  )
+}
+
+/** Lab rhythm editor: the clickable grid plus pattern operations. */
+function RhythmEditor() {
+  const s = useStore()
+  return (
+    <div>
+      <div className="row" style={{ marginBottom: 6, alignItems: 'center' }}>
+        <span className="readout" style={{ minWidth: 110 }}>
+          {s.rhythmName}{s.rhythmName === 'custom' ? ' pattern' : ''}
+        </span>
+        <button onClick={() => s.rotateRhythm(-1)} aria-label="Rotate pattern left">⟲ Rotate</button>
+        <button onClick={() => s.rotateRhythm(1)} aria-label="Rotate pattern right">Rotate ⟳</button>
+        <button onClick={s.randomizeRhythm}>🎲 Randomize</button>
+        <button onClick={s.resetRhythm} disabled={s.rhythmName !== 'custom'}>Reset to preset</button>
+      </div>
+      <RhythmGrid
+        steps={s.rhythmSteps}
+        onsets={s.rhythmOnsets}
+        swing={s.swing}
+        swingUnit={s.swingUnit}
+        onToggle={s.toggleRhythmStep}
+      />
     </div>
   )
 }
@@ -194,8 +231,29 @@ function HeaderBar() {
           )}
         </div>
         <span className={`status-badge${s.playing ? ' playing' : ''}`}>{s.status}</span>
+        <ConnectionChip />
       </div>
     </header>
+  )
+}
+
+/** At-a-glance connection state; clicking jumps to the Connections panel. */
+function ConnectionChip() {
+  const s = useStore()
+  const daw = s.midiEnabled && s.midiOutId
+  const label = daw
+    ? `● ${s.midiOutputs.find((p) => p.id === s.midiOutId)?.name ?? 'MIDI out'}`
+    : s.midiEnabled
+      ? '○ no MIDI out'
+      : '○ DAW not connected'
+  return (
+    <button
+      className={'conn-chip' + (daw ? ' ok' : '')}
+      title={daw ? 'MIDI routed — click for connection settings' : 'Click to set up MIDI routing'}
+      onClick={() => document.getElementById('connections-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+    >
+      {label}
+    </button>
   )
 }
 
@@ -492,7 +550,7 @@ function LabPanels() {
             </select>
           </div>
         </div>
-        <RhythmGrid steps={s.rhythmSteps} onsets={s.rhythmOnsets} swing={s.swing} swingUnit={s.swingUnit} />
+        <RhythmEditor />
       </section>
 
       <section className="panel">
@@ -556,7 +614,7 @@ function OutputPanel() {
 function ConnectionsPanel() {
   const s = useStore()
   return (
-    <section className="panel">
+    <section className="panel" id="connections-panel">
       <h2>Connections</h2>
       <p className="panel-sub">Route MIDI to your DAW (via an IAC / loopMIDI port) and toggle the preview synth.</p>
       <div className="row">
@@ -600,6 +658,10 @@ function ConnectionsPanel() {
           </button>
         </div>
         <Dial label="Synth volume" value={s.synthVolume} onChange={s.setSynthVolume} />
+        <button onClick={s.testConnection} disabled={!s.loaded}>
+          🔔 Test connection
+        </button>
+        {s.testReport && <span className="readout" role="status">{s.testReport}</span>}
       </div>
     </section>
   )
@@ -780,15 +842,54 @@ function RespondView() {
   )
 }
 
+/** Live layout: the same instrument, big targets, minimal configuration. */
 function PerformView() {
+  const s = useStore()
+  const canListen = s.respondPhase === 'idle' || s.respondPhase === 'ready'
+  const pct = s.respondProgress >= 0 ? Math.min(100, (s.respondProgress / s.phraseSteps) * 100) : 0
   return (
-    <section className="panel">
-      <h2>Perform</h2>
-      <p className="panel-sub">
-        A large-target live layout for the same instrument.{' '}
-        <em>Landing in this build — coming online in the next milestones.</em>
-      </p>
-    </section>
+    <div className="perform">
+      <div className="perform-state">
+        <span className={`phase-badge phase-${s.respondPhase}`}>
+          {s.respondPhase === 'idle' ? (s.playing ? 'PLAYING' : 'STOPPED') : PHASE_LABEL[s.respondPhase]}
+        </span>
+        <span className="perform-chord">{s.currentChord}</span>
+        {s.variationQueued && <span className="queued-badge">Variation queued ⏳</span>}
+      </div>
+      {s.respondPhase === 'listening' && (
+        <div className="listen-progress" aria-label="Capture progress">
+          <div className="lp-fill" style={{ width: `${pct}%` }} />
+          <span className="lp-text">
+            {Math.floor(s.respondProgress / 16) + 1} / {Math.ceil(s.phraseSteps / 16)} bars
+          </span>
+        </div>
+      )}
+      <section className="panel timeline-panel">
+        <ChordTimeline />
+      </section>
+      <div className="perform-actions">
+        <button className="primary big" onClick={s.newListen} disabled={!canListen || !s.loaded}>
+          🎤 New Listen
+        </button>
+        <button className="big" disabled={!s.loaded || s.generating} onClick={s.reroll}>
+          ⟳ Variation
+        </button>
+        <button
+          className="primary big"
+          onClick={s.togglePlay}
+          disabled={!s.loaded || s.clockSource === 'external'}
+        >
+          {s.playing ? '■ Stop' : '▶ Play'}
+        </button>
+        <button className={'big' + (s.hold ? ' active' : '')} onClick={() => s.setHold(!s.hold)} aria-pressed={s.hold}>
+          Hold
+        </button>
+        <button className="danger big" onClick={s.panic}>Panic</button>
+      </div>
+      <section className="panel">
+        <MacroPanel />
+      </section>
+    </div>
   )
 }
 
