@@ -18,6 +18,8 @@ export type PlayerEvent =
   // V2 progression playback
   | { type: 'cycle'; index: number; step: number; at?: number } // phrase wrapped
   | { type: 'slotOnset'; slotId: string; at?: number } // a slot's chord struck
+  // Once per beat (not per step) — cheap enough to drive a phrase-position UI.
+  | { type: 'beat'; posSteps: number; totalSteps: number; cycleIndex: number }
   // `origin: 'auto'` = the machine replaced the progression during playback
   // (regen variation, a Respond answer). Those must not enter undo history.
   | { type: 'progressionApplied'; progression: Progression; origin: 'user' | 'auto' }

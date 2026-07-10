@@ -21,7 +21,7 @@ import type { Emitter } from '../events'
 import type { Sonifier } from './sonifier'
 import { compilePlan } from '../progression/operations'
 import type { PlaybackPlan, Progression } from '../progression/types'
-import { STEPS_PER_BAR, ROOT_NAMES } from './templates'
+import { STEPS_PER_BAR, STEPS_PER_BEAT, ROOT_NAMES } from './templates'
 import { modeFromValue, nextMode, keyRootFromDial, type PlayerMode } from '../voicing/performanceMap'
 
 export type SwapTiming = 'now' | 'bar' | 'cycle'
@@ -187,6 +187,16 @@ export class ProgressionPlayer {
     }
     s.pos = pos
 
+    // Phrase position for the UI, once per beat rather than once per step.
+    if (pos % STEPS_PER_BEAT === 0) {
+      this.emitter.emit({
+        type: 'beat',
+        posSteps: pos,
+        totalSteps: this.plan.totalSteps,
+        cycleIndex: s.cycleIndex,
+      })
+    }
+
     const slotIdx = this.plan.onsetToSlot.get(pos)
     if (slotIdx === undefined) return // not an onset step
     if (s.muted) return // respond-listening: time advances, nothing sounds
@@ -194,7 +204,11 @@ export class ProgressionPlayer {
     if (s.hold) {
       // Vamp: re-strike the latched chord at every onset; position advances.
       const held = this.progression.slots[s.heldSlotIndex] ?? this.progression.slots[slotIdx]
-      if (held) this.sonifier.sonifyChord(held.symbol, 'hold', at)
+      if (!held) return
+      // Announce the LATCHED slot so the timeline highlights the chord that is
+      // actually sounding, not the one the playhead happens to be passing.
+      this.emitter.emit({ type: 'slotOnset', slotId: held.id, at })
+      this.sonifier.sonifyChord(held.symbol, 'hold', at)
       return
     }
 

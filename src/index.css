@@ -85,9 +85,18 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 .panel-head h2 { margin: 0; }
+
+/* The progression is the primary object on screen. */
+.timeline-panel {
+  border-color: #3a4657;
+  background: linear-gradient(180deg, #1f242c, var(--panel));
+  padding-bottom: 18px;
+}
 
 /* Primary action row above the timeline */
 .action-bar {
@@ -104,7 +113,11 @@ body {
   gap: 10px;
   flex-wrap: wrap;
   align-items: stretch;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
+.chord-timeline.busy { opacity: 0.55; }
 
 .timeline-empty { color: var(--muted); font-size: 14px; padding: 18px 4px; }
 
@@ -113,24 +126,37 @@ body {
   flex-direction: column;
   gap: 5px;
   align-items: center;
-  min-width: 118px;
-  padding: 10px 10px 8px;
+  min-width: 126px;
+  padding: 8px 10px 6px;
   background: var(--panel-2);
-  border: 2px solid #2c3140;
+  border: 2px solid #3a4152;
   border-radius: 12px;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.chord-card.selected { border-color: var(--accent); }
+.chord-card.selected { border-color: var(--accent); background: #23303a; }
 .chord-card.playing { box-shadow: 0 0 10px #4fc3f755; border-color: var(--accent); }
-.chord-card.locked { border-style: solid; border-color: var(--accent-2); background: #2a2618; }
+.chord-card.locked { border-color: var(--accent-2); background: #2a2618; }
 .chord-card.locked.playing { box-shadow: 0 0 10px #ffb74d66; }
+.chord-card.vamping { box-shadow: 0 0 10px #ffb74d88; }
+.chord-card:focus-within { border-color: var(--accent); }
+
+/* Playhead / vamp marker — an icon, so state is never colour-only. */
+.cc-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 17px;
+  width: 100%;
+}
+.cc-play { font-size: 11px; color: var(--accent); }
+.chord-card.vamping .cc-play { color: var(--accent-2); }
 
 .cc-roman {
   font-size: 13px;
   color: var(--accent-2);
-  min-height: 17px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -147,7 +173,7 @@ body {
 .cc-symbol:hover { border-color: #4a5164; background: transparent; }
 
 .cc-symbol-input {
-  width: 92px;
+  width: 100px;
   font-size: 17px;
   font-weight: 700;
   text-align: center;
@@ -158,16 +184,45 @@ body {
   padding: 3px 4px;
 }
 
+.cc-row { display: flex; align-items: center; gap: 4px; }
+
 .cc-duration {
-  font-size: 11.5px;
+  font-size: 12px;
   padding: 2px 4px !important;
   color: var(--muted);
 }
 
-.cc-actions { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.cc-lock {
+  padding: 3px 6px;
+  font-size: 13px;
+  border-color: transparent;
+  background: transparent;
+  line-height: 1.2;
+}
+.cc-lock:hover { background: #363c4e; }
+.cc-lock.active { border-color: var(--accent-2); }
+
+/* Secondary actions: revealed on hover / keyboard focus / selection. Sixteen
+ * cards x seven always-on buttons is 112 competing targets. */
+.cc-actions {
+  display: flex;
+  gap: 2px;
+  flex-wrap: nowrap;
+  justify-content: center;
+  opacity: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: opacity 0.12s ease-out, max-height 0.12s ease-out;
+}
+.chord-card:hover .cc-actions,
+.chord-card:focus-within .cc-actions,
+.chord-card.selected .cc-actions {
+  opacity: 1;
+  max-height: 40px;
+}
 
 .cc-actions button {
-  padding: 3px 6px;
+  padding: 3px 5px;
   font-size: 12px;
   border-radius: 6px;
   border-color: transparent;
@@ -175,8 +230,9 @@ body {
   line-height: 1.2;
 }
 .cc-actions button:hover { background: #363c4e; }
-.cc-actions button.active { color: var(--accent-2); }
 .cc-actions button:disabled { opacity: 0.3; }
+
+.live-slot { display: inline-flex; gap: 8px; align-items: center; min-height: 24px; }
 
 .queued-badge {
   align-self: center;
@@ -185,6 +241,72 @@ body {
   border: 1px solid #7a5230;
   border-radius: 14px;
   padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.gen-badge {
+  align-self: center;
+  font-size: 12px;
+  color: var(--accent);
+  border: 1px solid #2f4653;
+  border-radius: 14px;
+  padding: 3px 10px;
+}
+.gen-badge::before {
+  content: '';
+  display: inline-block;
+  width: 8px; height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: gen-pulse 0.9s ease-in-out infinite;
+}
+@keyframes gen-pulse { 50% { opacity: 0.25; } }
+
+.banner.notice {
+  position: relative;
+  background: #1b2a33;
+  border-color: #2f4653;
+  color: #cfe6f2;
+  padding-right: 40px;
+}
+.banner-close {
+  position: absolute;
+  top: 6px; right: 8px;
+  border: none; background: transparent;
+  color: var(--muted); font-size: 18px; line-height: 1;
+  padding: 2px 6px;
+}
+
+/* Phrase position — where the playhead is inside the phrase. */
+.phrase-pos { display: flex; align-items: center; gap: 10px; min-width: 240px; }
+.pp-track {
+  flex: 1 1 auto;
+  height: 6px;
+  background: var(--panel-2);
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 120px;
+}
+.pp-fill { height: 100%; background: var(--accent); transition: width 0.12s linear; }
+.pp-text { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.explain-hint { font-size: 13px; color: var(--muted); margin: 14px 0 2px; }
+.explain-hint em { color: var(--accent); font-style: normal; }
+
+/* Visible keyboard focus everywhere (WCAG 2.4.7). */
+:where(button, select, input, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Comfortable touch targets on coarse pointers (WCAG 2.5.5). */
+@media (pointer: coarse) {
+  .cc-actions { opacity: 1; max-height: 48px; }
+  .cc-actions button, .cc-lock { min-width: 44px; min-height: 44px; }
+  .rg-cell { min-width: 22px; min-height: 22px; }
+  .intro-close, .banner-close { min-width: 44px; min-height: 44px; }
 }
 
 /* The four signature macros — larger than ordinary dials */
@@ -547,7 +669,9 @@ button:disabled { opacity: 0.45; cursor: default; }
   height: 15px;
   border-radius: 3px;
   background: var(--panel-2);
-  border: 1px solid #2c3140;
+  /* A step cell carries no text, so its border is the only thing identifying
+   * the control: it must clear 3:1 against the panel (WCAG 1.4.11). */
+  border: 1px solid #6e778c;
   transition: left 0.12s ease-out;
   padding: 0;
   cursor: default;
@@ -557,8 +681,8 @@ button.rg-cell { cursor: pointer; }
 button.rg-cell:hover { border-color: var(--accent); }
 button.rg-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-.rg-cell.beat { border-color: #3a4152; }
-.rg-cell.bar { border-color: #55617a; }
+.rg-cell.beat { border-color: #7e8798; }
+.rg-cell.bar { border-color: #9aa3b5; }
 .rg-cell.swung { border-color: var(--accent-2); }
 .rg-cell.on {
   background: var(--accent);
@@ -572,5 +696,10 @@ button.rg-cell:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .rg-cell { transition: none; }
+  .rg-cell,
+  .chord-card,
+  .cc-actions,
+  .pp-fill,
+  .lp-fill { transition: none; }
+  .gen-badge::before { animation: none; }
 }

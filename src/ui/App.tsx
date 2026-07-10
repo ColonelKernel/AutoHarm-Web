@@ -199,7 +199,18 @@ function ModeTabs() {
 
 /** Header strip: identity, mode tabs, key/tempo at a glance. */
 function HeaderBar() {
-  const s = useStore()
+  // Primitive selectors only: an object-returning selector would allocate a new
+  // snapshot every render and trip React's getSnapshot caching check.
+  const keyRoot = useStore((st) => st.keyRoot)
+  const keyMode = useStore((st) => st.keyMode)
+  const bpm = useStore((st) => st.bpm)
+  const clockSource = useStore((st) => st.clockSource)
+  const externalBpm = useStore((st) => st.externalBpm)
+  const playing = useStore((st) => st.playing)
+  const status = useStore((st) => st.status)
+  const setKeyRoot = useStore((st) => st.setKeyRoot)
+  const setKeyMode = useStore((st) => st.setKeyMode)
+  const setBpm = useStore((st) => st.setBpm)
   return (
     <header className="app-header">
       <h1>AutoHarm</h1>
@@ -207,7 +218,7 @@ function HeaderBar() {
       <div className="header-status">
         <div className="control compact">
           <label>Key</label>
-          <select value={s.keyRoot} onChange={(e) => s.setKeyRoot(Number(e.target.value))}>
+          <select value={keyRoot} onChange={(e) => setKeyRoot(Number(e.target.value))}>
             {KEY_ROOTS.map((r, pc) => (
               <option key={r} value={pc}>{r}</option>
             ))}
@@ -215,27 +226,28 @@ function HeaderBar() {
         </div>
         <div className="control compact">
           <label>Mode</label>
-          <select value={s.keyMode} onChange={(e) => s.setKeyMode(e.target.value as 'maj' | 'min')}>
+          <select value={keyMode} onChange={(e) => setKeyMode(e.target.value as 'maj' | 'min')}>
             <option value="maj">major</option>
             <option value="min">minor</option>
           </select>
         </div>
         <div className="control compact">
-          <label>BPM{s.clockSource === 'external' ? ' (DAW)' : ''}</label>
-          {s.clockSource === 'external' ? (
-            <input type="text" readOnly value={s.externalBpm ? s.externalBpm.toFixed(1) : '…'} />
+          <label>BPM{clockSource === 'external' ? ' (DAW)' : ''}</label>
+          {clockSource === 'external' ? (
+            <input type="text" readOnly value={externalBpm ? externalBpm.toFixed(1) : '…'} />
           ) : (
             <input
               type="number"
               min={40}
               max={240}
-              value={s.bpm}
-              onChange={(e) => s.setBpm(Number(e.target.value))}
+              value={bpm}
+              onChange={(e) => setBpm(Number(e.target.value))}
             />
           )}
         </div>
-        <span className={`status-badge${s.playing ? ' playing' : ''}`}>{s.status}</span>
+        <span className={`status-badge${playing ? ' playing' : ''}`}>{status}</span>
         <ConnectionChip />
+        <ViewToggle />
       </div>
     </header>
   )
@@ -250,14 +262,44 @@ function ConnectionChip() {
     : s.midiEnabled
       ? '○ no MIDI out'
       : '○ DAW not connected'
+  const reveal = () => {
+    // The Connections panel does not exist in every view; switch to one that
+    // has it, then scroll after React has committed the new tree.
+    if (!document.getElementById('connections-panel')) s.setAppMode('generate')
+    requestAnimationFrame(() =>
+      document.getElementById('connections-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+    )
+  }
   return (
     <button
       className={'conn-chip' + (daw ? ' ok' : '')}
       title={daw ? 'MIDI routed — click for connection settings' : 'Click to set up MIDI routing'}
-      onClick={() => document.getElementById('connections-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+      onClick={reveal}
     >
       {label}
     </button>
+  )
+}
+
+/** Slim phrase-position bar: where the playhead is inside the current phrase. */
+function PhrasePosition() {
+  const playing = useStore((st) => st.playing)
+  const pos = useStore((st) => st.playPosSteps)
+  const total = useStore((st) => st.playTotalSteps)
+  const cycle = useStore((st) => st.playCycle)
+  if (!playing || pos < 0 || total <= 0) return null
+  const bars = Math.max(1, Math.ceil(total / 16))
+  const bar = Math.floor(pos / 16) + 1
+  const beat = Math.floor((pos % 16) / 4) + 1
+  return (
+    <div className="phrase-pos" aria-hidden="true">
+      <div className="pp-track">
+        <div className="pp-fill" style={{ width: `${((pos + 1) / total) * 100}%` }} />
+      </div>
+      <span className="pp-text">
+        bar {bar}/{bars} · beat {beat} · pass {cycle + 1}
+      </span>
+    </div>
   )
 }
 
@@ -291,7 +333,7 @@ function ActionBar() {
       <button
         disabled={!s.loaded || s.generating}
         title="Regenerate unlocked chords; locked ones survive"
-        onClick={s.reroll}
+        onClick={() => void s.reroll()}
       >
         ⟳ Variation
       </button>
@@ -301,7 +343,12 @@ function ActionBar() {
       <button disabled={!s.canRedo} onClick={s.redo} title="Redo (Cmd/Ctrl+Shift+Z)">
         ↪ Redo
       </button>
-      {s.variationQueued && <span className="queued-badge">Variation queued ⏳</span>}
+      <span className="live-slot" role="status">
+        {s.generating && <span className="gen-badge">Generating…</span>}
+        {!s.generating && s.variationQueued && (
+          <span className="queued-badge">Variation queued — lands at the next phrase</span>
+        )}
+      </span>
       <div className="control compact" style={{ marginLeft: 'auto' }}>
         <label>Display</label>
         <select value={s.displayMode} onChange={(e) => s.setDisplayMode(e.target.value as DisplayMode)}>
@@ -676,7 +723,14 @@ function ConnectionsPanel() {
 function ExplanationPanel() {
   const s = useStore()
   const slot = s.progression.slots.find((x) => x.id === s.selectedSlotId)
-  if (!slot) return null
+  if (!slot) {
+    return (
+      <p className="explain-hint">
+        Select a chord to see <em>why</em> it was chosen — its harmonic function and the scores
+        that picked it.
+      </p>
+    )
+  }
   const key = `${KEY_ROOTS[s.keyRoot]}:${s.keyMode}`
   const rn = romanNumeral(slot.symbol, key)
   const ex = slot.explanation
@@ -699,7 +753,7 @@ function ExplanationPanel() {
       </div>
       {ex?.reasons && ex.reasons.length > 0 && (
         <ul className="explain-reasons">
-          {ex.reasons.map((r) => <li key={r}>{r}</li>)}
+          {ex.reasons.map((r, i) => <li key={i}>{r}</li>)}
         </ul>
       )}
       {b && (
@@ -742,15 +796,11 @@ function GenerateView() {
       <section className="panel timeline-panel">
         <div className="panel-head">
           <h2>Progression</h2>
-          <ViewToggle />
+          <PhrasePosition />
         </div>
         <ActionBar />
         <ChordTimeline />
         <ExplanationPanel />
-      </section>
-      <section className="panel">
-        <h2>Transport</h2>
-        <TransportBar />
       </section>
       <section className="panel">
         <h2>Direction</h2>
@@ -758,6 +808,10 @@ function GenerateView() {
           Pick a preset or shape it yourself — these four dials are the musical personality.
         </p>
         <MacroPanel />
+      </section>
+      <section className="panel">
+        <h2>Transport</h2>
+        <TransportBar />
       </section>
       {viewMode === 'lab' && (
         <section className="panel">
@@ -856,12 +910,17 @@ function PerformView() {
   return (
     <div className="perform">
       <div className="perform-state">
-        <span className={`phase-badge phase-${s.respondPhase}`}>
+        <span className={`phase-badge phase-${s.respondPhase}`} role="status">
           {s.respondPhase === 'idle' ? (s.playing ? 'PLAYING' : 'STOPPED') : PHASE_LABEL[s.respondPhase]}
         </span>
         <span className="perform-chord">{s.currentChord}</span>
-        {s.variationQueued && <span className="queued-badge">Variation queued ⏳</span>}
+        <span className="live-slot" role="status">
+          {s.generating && <span className="gen-badge">Generating…</span>}
+          {!s.generating && s.variationQueued && <span className="queued-badge">Variation queued</span>}
+          {s.hold && <span className="queued-badge">Hold — vamping</span>}
+        </span>
       </div>
+      <PhrasePosition />
       {s.respondPhase === 'listening' && (
         <div className="listen-progress" aria-label="Capture progress">
           <div className="lp-fill" style={{ width: `${pct}%` }} />
@@ -900,32 +959,50 @@ function PerformView() {
 }
 
 export default function App() {
-  const s = useStore()
+  // Narrow selectors: App is the tree root, so a bare useStore() here would
+  // re-render every panel on each per-beat store patch during playback.
+  const loadError = useStore((s) => s.loadError)
+  const lastError = useStore((s) => s.lastError)
+  const notice = useStore((s) => s.notice)
+  const dismissNotice = useStore((s) => s.dismissNotice)
+  const midiSupported = useStore((s) => s.midiSupported)
+  const appMode = useStore((s) => s.appMode)
 
   useEffect(() => {
     void useStore.getState().init()
   }, [])
 
-  // Global undo/redo shortcuts; never hijack typing in form fields.
+  // Global shortcuts. Never hijack typing in a form field, and never steal
+  // Space from a focused button (that would break every keyboard control).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'z') return
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
-      e.preventDefault()
+      const typing =
+        !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)
+      if (typing) return
       const st = useStore.getState()
-      if (e.shiftKey) st.redo()
-      else st.undo()
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) st.redo()
+        else st.undo()
+        return
+      }
+      if (e.key === ' ' && !(t && t.tagName === 'BUTTON')) {
+        if (!st.loaded || st.clockSource === 'external') return
+        e.preventDefault()
+        st.togglePlay()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  if (s.loadError) {
+  if (loadError) {
     return (
       <main className="app">
         <h1>AutoHarm</h1>
-        <div className="banner">Failed to load corpora: {s.loadError}</div>
+        <div className="banner">Failed to load corpora: {loadError}</div>
       </main>
     )
   }
@@ -934,20 +1011,28 @@ export default function App() {
     <main className="app">
       <HeaderBar />
       <IntroCard />
-      {s.lastError && (
+      {lastError && (
         <div className="status-line">
-          <span className="error-text">{s.lastError}</span>
+          <span className="error-text">{lastError}</span>
         </div>
       )}
-      {!s.midiSupported && (
+      {notice && (
+        <div className="banner notice" role="status">
+          {notice}
+          <button className="banner-close" aria-label="Dismiss notice" onClick={dismissNotice}>
+            ×
+          </button>
+        </div>
+      )}
+      {!midiSupported && (
         <div className="banner">
           This browser has no Web MIDI (Safari doesn't support it). The built-in synth still works —
           use Chrome, Edge or Firefox to route MIDI into your DAW.
         </div>
       )}
-      {s.appMode === 'generate' && <GenerateView />}
-      {s.appMode === 'respond' && <RespondView />}
-      {s.appMode === 'perform' && <PerformView />}
+      {appMode === 'generate' && <GenerateView />}
+      {appMode === 'respond' && <RespondView />}
+      {appMode === 'perform' && <PerformView />}
     </main>
   )
 }

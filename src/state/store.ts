@@ -64,6 +64,9 @@ interface AppState {
   progression: Progression
   playingSlotId: string | null // slot currently sounding (timeline highlight)
   generating: boolean
+  playPosSteps: number // position within the phrase (-1 when stopped)
+  playTotalSteps: number
+  playCycle: number
   appMode: AppMode
   viewMode: ViewMode
   displayMode: DisplayMode
@@ -134,7 +137,7 @@ interface AppState {
   enableMidi(): Promise<void>
   togglePlay(): void
   generateNew(): Promise<void>
-  reroll(): void
+  reroll(): Promise<void>
   setAppMode(m: AppMode): void
   setViewMode(v: ViewMode): void
   setDisplayMode(d: DisplayMode): void
@@ -161,6 +164,7 @@ interface AppState {
   resetRhythm(): void
   testConnection(): void
   testReport: string | null
+  dismissNotice(): void
   panic(): void
   audition(): void
   exportMidi(): void
@@ -249,6 +253,9 @@ export const useStore = create<AppState>((set, get) => ({
   progression: makeProgression([]),
   playingSlotId: null,
   generating: false,
+  playPosSteps: -1,
+  playTotalSteps: 0,
+  playCycle: 0,
   appMode: 'generate',
   viewMode: 'quick',
   displayMode: 'both',
@@ -340,7 +347,7 @@ export const useStore = create<AppState>((set, get) => ({
           set({ currentNotes: [] })
           break
         case 'playoff':
-          set({ playing: false })
+          set({ playing: false, playPosSteps: -1, playingSlotId: null })
           break
         case 'error':
           set({ lastError: e.detail ? `${e.code}: ${e.detail}` : e.code })
@@ -375,6 +382,9 @@ export const useStore = create<AppState>((set, get) => ({
         case 'slotOnset':
           set({ playingSlotId: e.slotId })
           break
+        case 'beat':
+          set({ playPosSteps: e.posSteps, playTotalSteps: e.totalSteps, playCycle: e.cycleIndex })
+          break
         case 'staged':
           set({ variationQueued: e.pending })
           break
@@ -397,7 +407,7 @@ export const useStore = create<AppState>((set, get) => ({
       const s = get()
       switch (a.action) {
         case 'playtoggle': s.togglePlay(); break
-        case 'reroll': s.reroll(); break
+        case 'reroll': void s.reroll(); break
         case 'holdtoggle': s.setHold(!get().hold); break
         case 'modecycle': {
           const next = MODES[(MODES.indexOf(get().mode) + 1) % MODES.length]
@@ -676,6 +686,10 @@ export const useStore = create<AppState>((set, get) => ({
     get().setRhythm(get().rhythm) // back to the dial's template
   },
 
+  dismissNotice() {
+    set({ notice: null })
+  },
+
   testConnection() {
     const s = get()
     const outName = s.midiOutputs.find((p) => p.id === s.midiOutId)?.name ?? null
@@ -684,10 +698,12 @@ export const useStore = create<AppState>((set, get) => ({
     setTimeout(() => set({ testReport: null }), 4000)
   },
 
-  reroll() {
+  async reroll() {
     // Variation semantics: locked slots survive; queued to the boundary
     // while playing, immediate when stopped.
-    void getRuntime().generateVariation()
+    set({ generating: true })
+    await getRuntime().generateVariation('user')
+    set({ generating: false })
   },
 
   panic() {

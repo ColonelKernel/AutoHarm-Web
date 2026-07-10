@@ -101,3 +101,61 @@ Tracked per milestone below.
 - Baseline: 84 tests / build clean (recorded above).
 - Final: **168 tests / 20 files**, `tsc -b && vite build` clean, no console errors.
 - Browser-verified on the dev build: lock->variation preserves locks; undo/redo single-press; roman numerals live (Eb:maj7 in C = bIIImaj7); presets land macros exactly (Neo-Soul -> charleston + 60% swing); Lab edit -> macro Custom -> reclaim; Respond full loop at 240 BPM (0 notes sounded during capture, response on the closing downbeat, 2-rep commitment = 3998 ms, READY holds, slot-0 reasons correct); rhythm grid toggle/reset; Test-connection report; Perform view; persistence restore (Dark Cinematic + key mode, no auto-play); edited-progression playback == export (.mid parsed: onsets beats 0/2, Eb:maj pcs + tension-added 7th); mobile 375px no horizontal overflow.
+
+## Adversarial review pass + UI improvements
+
+A multi-agent review ran 8 correctness dimensions over the whole V2 diff, each
+finding challenged by two independent skeptics (a refuter and a reproduction
+engineer). 26 findings raised, 10 refuted, 16 confirmed; 10 were real defects
+and were fixed in `a9685bf` (see that commit message for the full list). The
+highest-value ones:
+
+- `melodyAnalysis` compared a MIDI note number against a stored pitch class, so
+  the "highest note of the last onset" tie-break was always true and degraded to
+  "last note captured" — the wrong terminal pitch class fed cadence scoring.
+- A generation kicked by one Respond listen could resolve during the *next*
+  listen and answer a phrase the user never played (phase alone cannot
+  distinguish window N's `listening` from window N+1's). Fixed with a per-listen
+  epoch, and `cancelListen`/`newListen` now invalidate the generation scheduler.
+- Variation matched locked slots by **index** against a freshly generated onset
+  list whenever the phrase length had changed, silently shifting or dropping
+  every lock. New pure `alignPriorToOnsets()` re-anchors locks by onset **step**
+  and reports the ones whose position no longer exists.
+
+### UI changes
+
+Accessibility (the blocking items):
+- Chord cards are a real `<ul>/<li>` list. Selection now **follows focus**, so a
+  keyboard user tabbing a card sees its explanation without an extra control;
+  `aria-current` announces it. Previously the card was a `<div role="group">`
+  with a click handler and no `tabIndex` — selection was mouse-only.
+- Global `:focus-visible` ring; 44px touch targets under `@media (pointer:
+  coarse)`; `prefers-reduced-motion` now covers every transition/animation.
+- Rhythm step cells carry no text, so their border is the only thing identifying
+  the control — raised to 3.37:1 (WCAG 1.4.11 needs 3:1; it was 2.51:1).
+- `role="status"` on the notice banner, generating pill and queued badge.
+
+Core loop + live feedback:
+- Panels reordered to the spec's hierarchy: Progression → Direction (macros) →
+  Transport → Output → Connections.
+- The six secondary actions per card are progressively disclosed on hover /
+  focus-within / selection. Sixteen cards x seven always-on buttons was 112
+  competing targets; the lock stays visible because Variation depends on it.
+- New phrase-position bar (bar/beat/pass), driven by a once-per-beat `beat`
+  event rather than per-step.
+- Hold now highlights *which* chord is vamping (`⟳` icon, "vamping" in the
+  accessible name) instead of tracking the passing playhead.
+- `Generating…` pill, explanation empty-state hint, dismissible notice banner,
+  Space = Play/Stop (never when a button is focused), connection chip works from
+  every view.
+- `App()` and `HeaderBar` no longer subscribe to the whole store — a bare
+  `useStore()` at the tree root re-rendered every panel on each per-beat patch.
+
+### Known gaps
+
+- The four UI design agents and the synthesis step of the review workflow hit the
+  account spend limit and never ran; the UI work above was designed directly from
+  the confirmed findings rather than from a design panel.
+- `runtime.ts` still has no direct unit test (it needs `fetch` + `AudioContext`
+  fakes). Capture timestamping (`stepFor`) and the store's undo/`progressionApplied`
+  interaction are covered only through the browser, not the suite.
