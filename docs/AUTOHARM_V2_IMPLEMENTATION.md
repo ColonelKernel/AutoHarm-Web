@@ -156,6 +156,41 @@ Core loop + live feedback:
 - The four UI design agents and the synthesis step of the review workflow hit the
   account spend limit and never ran; the UI work above was designed directly from
   the confirmed findings rather than from a design panel.
-- `runtime.ts` still has no direct unit test (it needs `fetch` + `AudioContext`
-  fakes). Capture timestamping (`stepFor`) and the store's undo/`progressionApplied`
-  interaction are covered only through the browser, not the suite.
+
+## Composition-root tests (`test/runtime.test.ts`, 63 tests)
+
+Closes the ledger's standing `runtime.ts` gap. The suite runs the **real** engine
+graph — real corpora, real player, real respond engine, real scheduler — and fakes
+only the browser (`AudioContext`, `Worker`, `fetch`). That is the point: every
+confirmed V2 defect lived in the wiring between those parts, so a test that stubbed
+the engine would have caught none of them. Where a test calls `midi.onNoteIn` or
+`midi.onClockStep` it uses the entry point the real adapter calls.
+
+Covered: eager load-time generation; swap-origin threading (`user` vs `auto`, the
+undo-pollution seam); lock re-anchoring by onset step across a phrase-length change
+plus the dropped-lock notice; `rerollSlot` id/lock preservation; the pristine
+"performable dial" rule; edit staging (`now` / `bar` / `cycle`); scheduler
+invalidation on `stopTransport` / `newListen` / `cancelListen` (a walk is caught
+mid-flight with a gated sampler and must resolve to `null`); the frozen respond
+window; MIDI note routing in all four modes; the external MIDI-clock transport;
+recording, rebase and `.mid` export; `testConnection`'s guaranteed release.
+
+### Bug these tests found: rhythm changes never changed the rhythm
+
+`maybeRegenerate()` routed template and custom-grid changes through
+`generateVariation()`, which deliberately reuses the take's onsets so locked slots
+keep their timing. But a rhythm change never alters `phraseSteps`, so
+`runGeneration`'s `prior.totalSteps === this.phraseSteps` branch always won and the
+new grid was discarded. The chords resampled, so the UI looked alive while the
+onsets never moved — the rhythm editor and the template dial were inert. Introduced
+in `316d2f4` (generated harmonic rhythm); shipped in PR #1.
+
+`pristine()` already guarantees no locks and no hand edits, so `maybeRegenerate`
+now calls `runGeneration(undefined, …)` and draws a fresh grid. Guarded by
+`pristine gating > redraws the GRID on a rhythm change, not just the chords`, which
+was confirmed to fail against the pre-fix code.
+
+Still uncovered: `stepFor()` capture timestamping against a real lookahead clock.
+The fake `AudioContext`'s `currentTime` never advances, so the ring-buffer lookup is
+never exercised with genuine MIDI arrival times. That stays a hardware-only check
+(`docs/V2_MANUAL_TEST_CHECKLIST.md`).
