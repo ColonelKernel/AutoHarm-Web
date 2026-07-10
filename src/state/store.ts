@@ -11,8 +11,9 @@ import {
   DEFAULT_TEMPLATE_ID,
   STEPS_PER_BAR,
   rhythmToTemplate,
-} from '../engine/player/autoPlayer'
+} from '../engine/player/templates'
 import { swingLabel, DEFAULT_SWING_UNIT, type SwingUnit } from '../engine/player/swing'
+import { makeProgression, type Progression } from '../engine/progression/types'
 import { MidiIO, type MidiPortInfo } from '../io/midi'
 import { downloadBytes } from '../io/download'
 import type { ModelName, SessionMode } from '../engine/markov/config'
@@ -35,6 +36,11 @@ interface AppState {
   clockSource: 'internal' | 'external'
   externalBpm: number | null
   recordedCount: number // sounding chords captured in the current take
+
+  // V2 canonical progression (mirror of the player's active progression)
+  progression: Progression
+  playingSlotId: string | null // slot currently sounding (timeline highlight)
+  generating: boolean
 
   // generator dials
   color: number
@@ -86,6 +92,7 @@ interface AppState {
   init(): Promise<void>
   enableMidi(): Promise<void>
   togglePlay(): void
+  generateNew(): Promise<void>
   reroll(): void
   panic(): void
   audition(): void
@@ -138,6 +145,10 @@ export const useStore = create<AppState>((set, get) => ({
   clockSource: 'internal',
   externalBpm: null,
   recordedCount: 0,
+
+  progression: makeProgression([]),
+  playingSlotId: null,
+  generating: false,
 
   color: 0.5,
   adventure: 0.35,
@@ -220,8 +231,17 @@ export const useStore = create<AppState>((set, get) => ({
         case 'tempo':
           set({ externalBpm: e.bpm })
           break
+        case 'progressionApplied':
+          set({ progression: e.progression })
+          break
+        case 'slotOnset':
+          set({ playingSlotId: e.slotId })
+          break
       }
     })
+    // The initial progression was generated inside load(), before this
+    // subscription existed — read it directly.
+    set({ progression: rt.player.activeProgression })
 
     rt.onRecordingChanged = (count) => set({ recordedCount: count })
 
@@ -252,7 +272,6 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Apply store defaults to the engine (mode differs from the port default).
     rt.player.setMode(get().mode)
-    rt.player.setLengthBars(get().phraseBars)
     set({ loaded: true, status: 'ready' })
   },
 
@@ -282,8 +301,16 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  async generateNew() {
+    set({ generating: true })
+    await getRuntime().generateNew()
+    set({ generating: false })
+  },
+
   reroll() {
-    getRuntime().player.reroll()
+    // Variation semantics: locked slots survive; queued to the boundary
+    // while playing, immediate when stopped.
+    void getRuntime().generateVariation()
   },
 
   panic() {
@@ -294,7 +321,7 @@ export const useStore = create<AppState>((set, get) => ({
   audition() {
     const rt = getRuntime()
     rt.ensureAudio()
-    rt.player.audition()
+    rt.player.audition(rt.seed)
   },
 
   exportMidi() {
@@ -367,7 +394,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   setSeedIndex(i) {
     const idx = Math.max(0, Math.min(SEED_LIST.length - 1, i))
-    getRuntime().player.setSeed(SEED_LIST[idx])
+    getRuntime().setSeed(SEED_LIST[idx])
     set({ seedIndex: idx })
   },
   setKeyRoot(pc) {
@@ -388,13 +415,13 @@ export const useStore = create<AppState>((set, get) => ({
     set({ hold: on })
   },
   setPhraseBars(bars) {
-    getRuntime().player.setLengthBars(bars)
+    getRuntime().setPhraseSteps(bars * STEPS_PER_BAR)
     set({ phraseBars: bars })
   },
   setRhythm(v) {
-    const name = getRuntime().player.setRhythm(v)
     const t = TEMPLATES[rhythmToTemplate(v)]
-    set({ rhythm: v, rhythmName: name, rhythmOnsets: t.onsets, rhythmSteps: t.spanBars * STEPS_PER_BAR })
+    getRuntime().setTemplate(rhythmToTemplate(v))
+    set({ rhythm: v, rhythmName: t.name, rhythmOnsets: t.onsets, rhythmSteps: t.spanBars * STEPS_PER_BAR })
   },
   setSwing(v) {
     getRuntime().setSwing(v)
