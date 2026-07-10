@@ -9,6 +9,7 @@ import { swingDelaySteps, swingLabel, SWING_UNITS, type SwingUnit } from '../eng
 import type { PlayerMode } from '../engine/voicing/performanceMap'
 import { ChordTimeline } from './ChordTimeline'
 import { MODEL_DISPLAY } from './modelNames'
+import { romanNumeral } from '../engine/theory/romanNumeral'
 
 function Dial(props: {
   label: string
@@ -604,6 +605,68 @@ function ConnectionsPanel() {
   )
 }
 
+/** Why-this-chord panel for the selected card — deterministic data only:
+ * roman function, the actual score breakdown, model prior, blend profile. */
+function ExplanationPanel() {
+  const s = useStore()
+  const slot = s.progression.slots.find((x) => x.id === s.selectedSlotId)
+  if (!slot) return null
+  const key = `${KEY_ROOTS[s.keyRoot]}:${s.keyMode}`
+  const rn = romanNumeral(slot.symbol, key)
+  const ex = slot.explanation
+  const b = ex?.breakdown
+  return (
+    <div className="explain" aria-label={`Why ${slot.symbol}`}>
+      <div className="explain-head">
+        <span className="explain-symbol">{slot.symbol}</span>
+        {rn && (
+          <span className="explain-fn">
+            Function: <b>{rn.numeral}</b> · Role: <b>{rn.degreeLabel}</b>
+            {!rn.diatonic && ' (chromatic)'}
+          </span>
+        )}
+        <span className="explain-src">
+          {slot.source === 'response' ? 'chosen in response to your phrase'
+            : slot.source === 'manual' ? 'edited by you'
+            : 'generated'}
+        </span>
+      </div>
+      {ex?.reasons && ex.reasons.length > 0 && (
+        <ul className="explain-reasons">
+          {ex.reasons.map((r) => <li key={r}>{r}</li>)}
+        </ul>
+      )}
+      {b && (
+        <div className="explain-scores">
+          {([
+            ['Melody fit', b.melodyFit],
+            ['Model preference', b.modelPrior],
+            ['Voice leading', b.voiceLeadingFit],
+            ['Cadence fit', b.cadenceFit],
+            ['Novelty', b.noveltyFit],
+          ] as const).map(([label, v]) => (
+            <div className="score-row" key={label}>
+              <span className="score-label">{label}</span>
+              <span className="score-bar"><span style={{ width: `${Math.round(v * 100)}%` }} /></span>
+              <span className="score-val">{v.toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {!b && ex?.prior != null && (
+        <p className="panel-sub">Candidate score from the model: {ex.prior.toFixed(3)} (selection probability, not a confidence).</p>
+      )}
+      {ex?.blendProfile && (
+        <p className="panel-sub">
+          Blend profile at generation:{' '}
+          {ex.blendProfile.map(([n, w]) => `${n} ${(w * 100).toFixed(0)}%`).join(' · ')}
+        </p>
+      )}
+      {!ex && <p className="panel-sub">No generation data for this chord (edited or pre-V2).</p>}
+    </div>
+  )
+}
+
 function GenerateView() {
   const viewMode = useStore((s) => s.viewMode)
   return (
@@ -615,6 +678,7 @@ function GenerateView() {
         </div>
         <ActionBar />
         <ChordTimeline />
+        <ExplanationPanel />
       </section>
       <section className="panel">
         <h2>Transport</h2>
@@ -643,15 +707,76 @@ function GenerateView() {
   )
 }
 
+const PHASE_LABEL: Record<string, string> = {
+  idle: 'READY',
+  armed: 'ARMED — capture starts at the next phrase boundary',
+  listening: 'LISTENING',
+  analyzing: 'ANALYZING',
+  responding: 'HOLDING RESPONSE',
+  ready: 'READY — response holding until your next phrase',
+}
+
 function RespondView() {
+  const s = useStore()
+  const canListen = s.respondPhase === 'idle' || s.respondPhase === 'ready'
+  const pct = s.respondProgress >= 0 ? Math.min(100, (s.respondProgress / s.phraseSteps) * 100) : 0
   return (
-    <section className="panel">
-      <h2>Respond</h2>
-      <p className="panel-sub">
-        Play a phrase on a MIDI keyboard; AutoHarm listens for the full phrase, then answers with
-        harmony that fits it. <em>Landing in this build — coming online in the next milestones.</em>
-      </p>
-    </section>
+    <>
+      <section className="panel">
+        <h2>Listen &amp; Respond</h2>
+        <p className="panel-sub">
+          Press <em>New Listen</em>, play a phrase on your MIDI keyboard for the full window, and
+          AutoHarm answers with harmony scored against your melody — held steady for the chosen
+          number of repetitions.
+        </p>
+        {!s.midiEnabled && (
+          <div className="banner">
+            Respond listens to a MIDI keyboard — enable MIDI below and pick a MIDI in device.
+          </div>
+        )}
+        <div className="respond-state" role="status">
+          <span className={`phase-badge phase-${s.respondPhase}`}>{PHASE_LABEL[s.respondPhase]}</span>
+          {s.respondPhase === 'responding' && (
+            <span className="readout">{s.respondRepsLeft} repetition{s.respondRepsLeft === 1 ? '' : 's'} left</span>
+          )}
+        </div>
+        {s.respondPhase === 'listening' && (
+          <div className="listen-progress" aria-label="Capture progress">
+            <div className="lp-fill" style={{ width: `${pct}%` }} />
+            <span className="lp-text">
+              {Math.floor(s.respondProgress / 16) + 1} / {Math.ceil(s.phraseSteps / 16)} bars
+            </span>
+          </div>
+        )}
+        <div className="transport" style={{ marginTop: 12 }}>
+          <button className="primary big" onClick={s.newListen} disabled={!canListen || !s.loaded}>
+            🎤 New Listen
+          </button>
+          {(s.respondPhase === 'armed' || s.respondPhase === 'listening' || s.respondPhase === 'analyzing') && (
+            <button onClick={s.cancelListen}>Cancel</button>
+          )}
+          <PhraseLengthControl />
+          <div className="control">
+            <label>Response repetitions</label>
+            <select value={s.repetitions} onChange={(e) => s.setRepetitions(Number(e.target.value))}>
+              {[1, 2, 4, 8].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
+          <button className="danger" onClick={s.panic}>Panic</button>
+        </div>
+      </section>
+      <section className="panel timeline-panel">
+        <div className="panel-head">
+          <h2>Response</h2>
+        </div>
+        <ChordTimeline />
+        <ExplanationPanel />
+      </section>
+      <OutputPanel />
+      <ConnectionsPanel />
+    </>
   )
 }
 

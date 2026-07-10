@@ -204,19 +204,31 @@ describe('RespondEngine state machine', () => {
     engine.noteOn(60, 90, 4, 0)
     engine.noteOff(60, 12, 0)
     for (let s = 0; s <= 31; s++) engine.onStep(s)
-    resolve() // staged before the boundary
+    resolve() // early-kicked generation staged BEFORE the boundary
     await new Promise((r) => setTimeout(r, 0))
-    engine.onCycle(32) // window closes
-    expect(engine.phase).toBe('analyzing')
-    engine.onCycle(64) // response lands + plays
-    expect(engine.phase).toBe('responding')
+    engine.onCycle(32) // window closes AND the staged response starts now
+    expect(engine.phase).toBe('responding') // no wasted silent cycle
     expect(calls.filter((c) => c === 'mute:false').length).toBe(1)
     expect(engine.repsLeft).toBe(2)
-    engine.onCycle(96) // rep 1 done
+    engine.onCycle(64) // rep 1 done
     expect(engine.phase).toBe('responding')
-    engine.onCycle(128) // rep 2 done
+    engine.onCycle(96) // rep 2 done
     expect(engine.phase).toBe('ready') // never silently overwritten
     expect(engine.lastAnalysis?.totalNotes).toBe(1)
+  })
+
+  it('slow generation degrades to one muted analyzing cycle, never mid-phrase', async () => {
+    const { engine, resolve } = harness(32, 1)
+    engine.newListen()
+    engine.onCycle(0)
+    for (let s = 0; s <= 31; s++) engine.onStep(s)
+    engine.onCycle(32) // close — generation still in flight
+    expect(engine.phase).toBe('analyzing')
+    resolve() // resolves mid-cycle; swap is staged for the next boundary
+    await new Promise((r) => setTimeout(r, 0))
+    expect(engine.phase).toBe('analyzing') // still muted, no mid-phrase mutation
+    engine.onCycle(64)
+    expect(engine.phase).toBe('responding')
   })
 
   it('New Listen is refused mid-commitment and accepted from ready', () => {

@@ -91,18 +91,17 @@ export class RespondEngine {
         this.setPhase('listening')
         break
       case 'listening':
-        // Window closes exactly one cycle after it opened.
+        // Window closes exactly one cycle after it opened. In the normal
+        // case the early-kicked response resolved DURING listening and was
+        // staged, so the player already swapped to it before emitting this
+        // cycle — unmute now and the answer starts on this very downbeat.
         this.closeWindow()
+        if (this.generationDone) this.beginResponding()
         break
       case 'analyzing':
-        // The staged response lands at THIS boundary (the player swaps
-        // before emitting 'cycle'), so unmute and start the commitment.
-        if (this.generationDone) {
-          this.effects.mute(false)
-          this.repsLeft = this.repetitions
-          this.setPhase('responding')
-        }
-        // else: generation still in flight — stay muted one more cycle.
+        // Fallback: generation missed the close boundary; its staged swap
+        // lands here instead (one graceful muted cycle, never mid-phrase).
+        if (this.generationDone) this.beginResponding()
         break
       case 'responding':
         this.repsLeft -= 1
@@ -139,6 +138,12 @@ export class RespondEngine {
   /** Analysis of the notes played so far, without consuming the buffer. */
   private peekAnalysis(): MelodyAnalysis {
     return analyzeMelody(this.capture.snapshot(this.windowStart, this.phraseSteps), this.phraseSteps)
+  }
+
+  private beginResponding(): void {
+    this.effects.mute(false)
+    this.repsLeft = this.repetitions
+    this.setPhase('responding')
   }
 
   private closeWindow(): void {

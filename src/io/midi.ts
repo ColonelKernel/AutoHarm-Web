@@ -40,7 +40,8 @@ export class MidiIO {
   private heldNotes = new Set<number>()
   channel = 0 // 0-based (channel 1)
 
-  onNoteIn: ((note: number, velocity: number) => void) | null = null
+  /** Note events with the DOMHighResTimeStamp of arrival (capture timing). */
+  onNoteIn: ((note: number, velocity: number, timeStampMs: number) => void) | null = null
   onProgramChange: ((program: number) => void) | null = null
   onControlChange: ((num: number, value: number) => void) | null = null
   onPortsChanged: (() => void) | null = null
@@ -108,8 +109,8 @@ export class MidiIO {
     }
 
     const status = b0 & 0xf0
-    if (status === NOTE_ON && data[2] > 0) this.onNoteIn?.(data[1], data[2])
-    else if (status === NOTE_ON || status === NOTE_OFF) this.onNoteIn?.(data[1], 0)
+    if (status === NOTE_ON && data[2] > 0) this.onNoteIn?.(data[1], data[2], e.timeStamp)
+    else if (status === NOTE_ON || status === NOTE_OFF) this.onNoteIn?.(data[1], 0, e.timeStamp)
     else if (status === PROGRAM_CHANGE) this.onProgramChange?.(data[1])
     else if (status === CC) this.onControlChange?.(data[1], data[2])
   }

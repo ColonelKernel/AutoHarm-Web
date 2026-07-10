@@ -1,6 +1,7 @@
 /** Typed event emitter — replaces Max.outlet in the ported player code. */
 
 import type { Progression } from './progression/types'
+import type { RespondPhase } from './respond/types'
 
 export type PlayerEvent =
   | { type: 'status'; value: string }
@@ -19,6 +20,7 @@ export type PlayerEvent =
   | { type: 'progressionApplied'; progression: Progression } // staged swap landed
   | { type: 'staged'; pending: boolean } // a variation is queued for the boundary
   | { type: 'genProgress'; done: number; total: number } // offline generation
+  | { type: 'respond'; phase: RespondPhase; progress: number; repsLeft: number }
 
 export type PlayerEventListener = (e: PlayerEvent) => void
 

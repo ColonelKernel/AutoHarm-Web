@@ -76,6 +76,9 @@ interface AppState {
   activePresetId: string | null
   phraseSteps: number
   repetitions: number // respond-mode response commitment
+  respondPhase: 'idle' | 'armed' | 'listening' | 'analyzing' | 'responding' | 'ready'
+  respondProgress: number // steps into the capture window (-1 outside)
+  respondRepsLeft: number
 
   // generator dials
   color: number
@@ -147,6 +150,8 @@ interface AppState {
   applyPreset(id: string): void
   setPhraseSteps(steps: number): void
   setRepetitions(n: number): void
+  newListen(): void
+  cancelListen(): void
   panic(): void
   audition(): void
   exportMidi(): void
@@ -235,6 +240,9 @@ export const useStore = create<AppState>((set, get) => ({
   activePresetId: null,
   phraseSteps: 8 * STEPS_PER_BAR,
   repetitions: 2,
+  respondPhase: 'idle',
+  respondProgress: -1,
+  respondRepsLeft: 0,
 
   color: 0.5,
   adventure: 0.35,
@@ -338,6 +346,9 @@ export const useStore = create<AppState>((set, get) => ({
         case 'staged':
           set({ variationQueued: e.pending })
           break
+        case 'respond':
+          set({ respondPhase: e.phase, respondProgress: e.progress, respondRepsLeft: e.repsLeft })
+          break
       }
     })
     // The initial progression was generated inside load(), before this
@@ -409,6 +420,10 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setAppMode(m) {
+    const rt = getRuntime()
+    rt.appMode = m
+    // Leaving Respond mid-listen abandons the window cleanly.
+    if (m !== 'respond' && rt.respond?.engaged) rt.cancelListen()
     set({ appMode: m })
   },
   setViewMode(v) {
@@ -491,6 +506,7 @@ export const useStore = create<AppState>((set, get) => ({
       case 'tension':
         rt.markov.setGravity(patch.gravity)
         rt.sonifier.setColor7th(patch.color7th)
+        rt.tension = macros.tension // cadence preference in respond scoring
         updates.gravity = patch.gravity
         updates.color7th = patch.color7th
         break
@@ -534,7 +550,19 @@ export const useStore = create<AppState>((set, get) => ({
     set({ phraseSteps: v, phraseBars: v / STEPS_PER_BAR })
   },
   setRepetitions(n) {
-    set({ repetitions: Math.max(1, Math.min(16, Math.round(n))) })
+    const v = Math.max(1, Math.min(16, Math.round(n)))
+    getRuntime().setRepetitions(v)
+    set({ repetitions: v })
+  },
+
+  newListen() {
+    const rt = getRuntime()
+    rt.ensureAudio()
+    if (rt.newListen()) set({ respondPhase: rt.respond.phase, playing: true })
+  },
+  cancelListen() {
+    getRuntime().cancelListen()
+    set({ respondPhase: 'idle', respondProgress: -1 })
   },
 
   reroll() {

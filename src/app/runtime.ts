@@ -28,7 +28,12 @@ import {
 } from '../engine/player/templates'
 import { generateProgression, chainTail } from '../engine/progression/generator'
 import { GenerationScheduler } from '../engine/progression/scheduler'
-import type { Progression } from '../engine/progression/types'
+import { makeProgression, makeSlot, type Progression } from '../engine/progression/types'
+import { RespondEngine } from '../engine/respond/responseEngine'
+import { scoreChord } from '../engine/respond/scoring'
+import { explainResponseChord } from '../engine/respond/explanation'
+import type { MelodyAnalysis } from '../engine/respond/types'
+import { chordToNotes } from '../engine/voicing/chordParser'
 import { swingDelaySteps, DEFAULT_SWING_UNIT, type SwingUnit } from '../engine/player/swing'
 import { ModelRegistry } from '../engine/registry'
 import { mulberry32, randomSeed } from '../engine/random'
@@ -69,6 +74,16 @@ export class Runtime {
   swing = 0 // 0 = straight .. 1 = hard shuffle (75:25)
   swingUnit: SwingUnit = DEFAULT_SWING_UNIT
 
+  // --- respond mode ---
+  respond!: RespondEngine
+  appMode: 'generate' | 'respond' | 'perform' = 'generate'
+  /** Tension macro value (cadence preference in response scoring). */
+  tension = 0.5
+  /** step -> unswung grid time ring buffer; maps MIDI arrival times onto the
+   * grid (the scheduling counter runs ~150 ms ahead of audio, so reading
+   * currentStep at note arrival would be wrong by up to a step). */
+  private timeline: Array<{ step: number; gridAt: number }> = []
+
   // --- MIDI recording (for .mid export) ---
   private currentStep = -1 // monotonic 16th-step counter within the current take
   private currentStepSwing = 0 // this step's swing delay, in steps
@@ -91,6 +106,13 @@ export class Runtime {
     this.player = new ProgressionPlayer(this.sonifier, this.emitter)
     this.player.onKeyChange = (k) => this.markov.setKey(k)
 
+    this.respond = new RespondEngine({
+      mute: (on) => this.player.setMuted(on),
+      generateResponse: (analysis) => this.buildResponse(analysis),
+      onPhaseChange: (phase, eng) =>
+        this.emitter.emit({ type: 'respond', phase, progress: eng.progressSteps, repsLeft: eng.repsLeft }),
+    })
+
     // Engine note/stop events -> audio + MIDI sinks (+ the recorder).
     this.emitter.on((e) => {
       if (e.type === 'notes') {
@@ -107,12 +129,13 @@ export class Runtime {
       } else if (e.type === 'playoff') {
         this.clock?.stop()
       } else if (e.type === 'cycle') {
+        this.respond.onCycle(e.step)
         this.onCycle()
       }
     })
 
     // MIDI input: notes route by app mode; pads/CC drive the performance map.
-    this.midi.onNoteIn = (note, vel) => this.routeNoteIn(note, vel)
+    this.midi.onNoteIn = (note, vel, ts) => this.routeNoteIn(note, vel, ts)
 
     // External MIDI clock: when the clock source is 'external', the DAW's
     // transport drives everything — Start begins playback, each 6th pulse is a
@@ -262,7 +285,12 @@ export class Runtime {
     const v = Math.round(steps)
     if (!Number.isFinite(v) || v < STEPS_PER_BAR / 2) return false
     this.phraseSteps = v
+    if (this.respond && !this.respond.engaged) this.respond.phraseSteps = v
     return this.maybeRegenerate()
+  }
+
+  setRepetitions(n: number): void {
+    this.respond.repetitions = Math.max(1, Math.min(16, Math.round(n)))
   }
 
   private maybeRegenerate(): boolean {
@@ -280,8 +308,10 @@ export class Runtime {
   }
 
   /** Regen phrase mode: auto-variation kicked at cycle START so the walk has
-   * a full cycle to finish before the boundary it lands on. */
+   * a full cycle to finish before the boundary it lands on. Respond mode owns
+   * the progression while engaged — never auto-vary over a response. */
   private onCycle(): void {
+    if (this.respond.engaged || this.respond.phase === 'ready') return
     if (this.player.state.mode !== 'regen' || this.player.state.hold) return
     void this.generateVariation()
   }
@@ -289,10 +319,20 @@ export class Runtime {
   /* --- MIDI input routing ------------------------------------------------------ */
 
   /** App-mode aware note routing (the MIDI adapter only reports events). */
-  private routeNoteIn(note: number, velocity: number): void {
-    if (velocity === 0) return // ignore note-offs for seeding
+  private routeNoteIn(note: number, velocity: number, timeStampMs: number): void {
     const n = Math.round(Number(note))
     if (!Number.isFinite(n)) return
+
+    // Respond capture takes priority whenever a window is armed or open.
+    if (this.respond.phase === 'armed' || this.respond.phase === 'listening') {
+      const at = this.stepFor(timeStampMs)
+      if (velocity > 0) this.respond.noteOn(n, velocity, at.step, at.msWithin)
+      else this.respond.noteOff(n, at.step, at.msWithin)
+      return
+    }
+    if (this.appMode === 'respond') return // notes outside a window are ignored
+
+    if (velocity === 0) return // ignore note-offs for seeding
     const symbol = `${ROOT_NAMES[((n % 12) + 12) % 12]}:maj`
     if (this.player.state.active) {
       // V2: a played note steers by seeding a variation at the boundary
@@ -302,6 +342,104 @@ export class Runtime {
     } else {
       this.seedChord(symbol)
     }
+  }
+
+  /** Map a MIDI arrival time onto the step grid via the timeline buffer. */
+  private stepFor(timeStampMs: number): { step: number; msWithin: number } {
+    if (!this.ctx || this.timeline.length === 0) {
+      return { step: Math.max(0, this.currentStep), msWithin: 0 }
+    }
+    const atAudio = (timeStampMs - (performance.now() - this.ctx.currentTime * 1000)) / 1000
+    let best = this.timeline[0]
+    for (const e of this.timeline) {
+      if (e.gridAt <= atAudio) best = e
+      else break
+    }
+    return { step: best.step, msWithin: Math.max(0, (atAudio - best.gridAt) * 1000) }
+  }
+
+  /* --- respond orchestration ----------------------------------------------------- */
+
+  /** Arm a listen. Starts the transport if stopped so a boundary will come. */
+  newListen(): boolean {
+    this.respond.phraseSteps = this.phraseSteps
+    const ok = this.respond.newListen()
+    if (ok && !this.player.state.active) this.startTransport()
+    return ok
+  }
+
+  cancelListen(): void {
+    this.respond.cancel()
+  }
+
+  /**
+   * Build the harmonic response: score the model's candidates against the
+   * melody for the FIRST chord (breakdown stored as its explanation), then
+   * continue the walk with that chord locked in; stage at the boundary.
+   */
+  private async buildResponse(analysis: MelodyAnalysis): Promise<Progression | null> {
+    const key = this.player.currentKey()
+    const context = this.seed
+    const onsets = this.phraseOnsets()
+    const durations = onsets.map((o, i) => (i + 1 < onsets.length ? onsets[i + 1] : this.phraseSteps) - o)
+
+    const cands = await Promise.resolve(this.registry.candidates(context, 12))
+    let first = context
+    let firstExplanation: Progression['slots'][number]['explanation'] | undefined
+    if (cands.length > 0) {
+      const maxPrior = Math.max(...cands.map((c) => c.prior))
+      const recent = this.player.activeProgression.slots.slice(-4).map((s) => s.symbol)
+      const prevVoicing = chordToNotes(context, this.sonifier.options, null).notes
+      let bestTotal = -1
+      for (const c of cands) {
+        const candidateNotes = chordToNotes(c.symbol, this.sonifier.options, prevVoicing).notes
+        const breakdown = scoreChord(c.symbol, {
+          analysis,
+          key,
+          tension: this.tension,
+          prior: maxPrior > 0 ? c.prior / maxPrior : 0,
+          candidateNotes,
+          prevVoicing,
+          recent,
+        })
+        if (breakdown.total > bestTotal) {
+          bestTotal = breakdown.total
+          first = c.symbol
+          firstExplanation = {
+            reasons: explainResponseChord(c.symbol, key, breakdown, analysis),
+            breakdown,
+            prior: c.prior,
+            blendProfile: this.blendProfile(),
+          }
+        }
+      }
+    }
+
+    // Lock the scored response chord into slot 0 and let the model walk on.
+    const prior = makeProgression(
+      durations.map((d, i) =>
+        makeSlot(i === 0 ? first : '?', d, i === 0 ? 'response' : 'generated', { locked: i === 0 }),
+      ),
+    )
+    const p = await this.scheduler.run((isCancelled) =>
+      generateProgression(
+        this.registry,
+        { seed: context, onsets, totalSteps: this.phraseSteps, prior, explain: { blendProfile: this.blendProfile() }, isCancelled },
+        this.emitter,
+      ),
+    )
+    if (!p) return null
+    const response = makeProgression(
+      p.slots.map((s, i) => ({
+        ...s,
+        locked: false,
+        source: 'response' as const,
+        ...(i === 0 && firstExplanation ? { explanation: firstExplanation } : {}),
+      })),
+    )
+    this.player.setProgression(response, 'cycle') // land exactly at the boundary
+    this.seed = chainTail(response, this.seed)
+    return response
   }
 
   /** Stopped-state seeding: ask the model for a reply and audition it (V1). */
@@ -374,6 +512,21 @@ export class Runtime {
   private advanceStep(gridTime?: number): number | undefined {
     this.currentStep += 1
     this.currentStepSwing = swingDelaySteps(this.currentStep, this.swing, this.swingUnit)
+    // Timeline for capture timestamping (UNSWUNG grid time — captured notes
+    // are measured against the straight grid so swing isn't double-counted).
+    if (gridTime !== undefined) {
+      this.timeline.push({ step: this.currentStep, gridAt: gridTime })
+      if (this.timeline.length > 64) this.timeline.shift()
+    }
+    this.respond.onStep(this.currentStep)
+    if (this.respond.phase === 'listening') {
+      this.emitter.emit({
+        type: 'respond',
+        phase: 'listening',
+        progress: this.respond.progressSteps,
+        repsLeft: this.respond.repsLeft,
+      })
+    }
     if (gridTime === undefined) return undefined
     return gridTime + this.currentStepSwing * this.stepSeconds()
   }
@@ -404,6 +557,7 @@ export class Runtime {
 
   stopTransport(): void {
     this.scheduler.invalidate() // drop in-flight walks aimed at old playback
+    this.respond.cancel()
     this.player.stop('stopped')
     this.clock?.stop()
     this.midi.allNotesOff()
@@ -470,6 +624,14 @@ export class Runtime {
 let runtime: Runtime | null = null
 
 export function getRuntime(): Runtime {
-  if (!runtime) runtime = new Runtime()
+  if (!runtime) {
+    runtime = new Runtime()
+    // Debug/manual-test handle: lets the V2 checklist drive Respond mode with
+    // synthetic MIDI (`__autoharm.midi.onNoteIn?.(60, 100, performance.now())`)
+    // when no keyboard is attached. Harmless in production.
+    if (typeof window !== 'undefined') {
+      ;(window as unknown as Record<string, unknown>).__autoharm = runtime
+    }
+  }
   return runtime
 }
