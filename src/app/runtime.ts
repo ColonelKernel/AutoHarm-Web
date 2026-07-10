@@ -360,7 +360,12 @@ export class Runtime {
   private maybeRegenerate(): boolean {
     if (!this.loaded) return false
     if (this.pristine()) {
-      void this.generateVariation('auto')
+      // Draw a FRESH grid. Routing this through generateVariation would reuse
+      // the take's onsets — that is what a variation is for — so a new
+      // template or custom grid would resample the chords and silently leave
+      // the rhythm untouched. `pristine` already means no locks and no hand
+      // edits, so there is nothing the old onsets are protecting.
+      void this.runGeneration(undefined, chainTail(this.player.activeProgression, this.seed), 'auto')
       return true
     }
     return false // takes effect on the next explicit Generate/Variation
