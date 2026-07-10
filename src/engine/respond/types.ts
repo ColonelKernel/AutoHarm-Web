@@ -38,11 +38,13 @@ export interface ChordScoreBreakdown {
   total: number
 }
 
-/** Weights of the response score — the same numbers shown to the user. */
+/** Weights of the response score — the same numbers shown to the user.
+ * Novelty must outweigh the voice-leading reward a chord earns just by
+ * repeating itself (zero movement), or near-ties vamp forever. */
 export const SCORE_WEIGHTS = {
   melodyFit: 0.35,
   modelPrior: 0.25,
-  voiceLeadingFit: 0.15,
+  voiceLeadingFit: 0.12,
   cadenceFit: 0.15,
-  noveltyFit: 0.1,
+  noveltyFit: 0.13,
 } as const

@@ -143,7 +143,7 @@ describe('scoring', () => {
 
   it('novelty discourages but never bans repeats', () => {
     expect(noveltyFit('C:maj', [])).toBe(1)
-    expect(noveltyFit('C:maj', ['G:7', 'C:maj'])).toBe(0.3)
+    expect(noveltyFit('C:maj', ['G:7', 'C:maj'])).toBe(0.15)
     expect(noveltyFit('C:maj', ['C:maj', 'G:7'])).toBe(0.7)
     expect(noveltyFit('C:maj', ['D:min'])).toBe(1)
   })
@@ -190,10 +190,11 @@ describe('RespondEngine state machine', () => {
     expect(engine.phase).toBe('listening')
     expect(calls).toContain('mute:true')
     // Steps up to (but not past) the early-kick threshold: no generation.
-    for (let s = 0; s < 15; s++) engine.onStep(s)
+    for (let s = 0; s < 28; s++) engine.onStep(s)
     expect(calls).not.toContain('generate')
-    // The kick happens at close - 16 (step 16 of 32) — from notes SO FAR.
-    engine.onStep(16)
+    // The kick happens one BEAT before close (step 28 of 32) — from the
+    // notes heard SO FAR, never ahead of them.
+    engine.onStep(28)
     expect(calls).toContain('generate')
   })
 
@@ -246,7 +247,7 @@ describe('RespondEngine state machine', () => {
     const { engine, calls, resolve } = harness(16)
     engine.newListen()
     engine.onCycle(0)
-    for (let s = 0; s <= 8; s++) engine.onStep(s) // triggers early kick (8 = half)
+    for (let s = 0; s <= 12; s++) engine.onStep(s) // early kick at 16-4 = 12
     expect(calls).toContain('generate')
     engine.cancel()
     expect(engine.phase).toBe('idle')

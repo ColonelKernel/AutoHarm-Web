@@ -28,12 +28,10 @@ import {
 } from '../engine/player/templates'
 import { generateProgression, chainTail } from '../engine/progression/generator'
 import { GenerationScheduler } from '../engine/progression/scheduler'
-import { makeProgression, makeSlot, type Progression } from '../engine/progression/types'
+import type { Progression } from '../engine/progression/types'
 import { RespondEngine } from '../engine/respond/responseEngine'
-import { scoreChord } from '../engine/respond/scoring'
-import { explainResponseChord } from '../engine/respond/explanation'
-import type { MelodyAnalysis } from '../engine/respond/types'
-import { chordToNotes } from '../engine/voicing/chordParser'
+import { harmonizePhrase } from '../engine/respond/harmonizer'
+import type { CapturedNote, MelodyAnalysis } from '../engine/respond/types'
 import { swingDelaySteps, DEFAULT_SWING_UNIT, type SwingUnit } from '../engine/player/swing'
 import { ModelRegistry } from '../engine/registry'
 import { mulberry32, randomSeed } from '../engine/random'
@@ -108,7 +106,7 @@ export class Runtime {
 
     this.respond = new RespondEngine({
       mute: (on) => this.player.setMuted(on),
-      generateResponse: (analysis) => this.buildResponse(analysis),
+      generateResponse: (notes, analysis) => this.buildResponse(notes, analysis),
       onPhaseChange: (phase, eng) =>
         this.emitter.emit({ type: 'respond', phase, progress: eng.progressSteps, repsLeft: eng.repsLeft }),
     })
@@ -373,73 +371,31 @@ export class Runtime {
   }
 
   /**
-   * Build the harmonic response: score the model's candidates against the
-   * melody for the FIRST chord (breakdown stored as its explanation), then
-   * continue the walk with that chord locked in; stage at the boundary.
+   * Build the harmonic response: per-slot harmonization. The captured phrase
+   * is segmented by the response's slot boundaries and every slot's
+   * candidates are scored against ITS melody segment (voice-leading threads
+   * through the walk); each slot carries its own breakdown. Staged at the
+   * boundary.
    */
-  private async buildResponse(analysis: MelodyAnalysis): Promise<Progression | null> {
-    const key = this.player.currentKey()
-    const context = this.seed
-    const onsets = this.phraseOnsets()
-    const durations = onsets.map((o, i) => (i + 1 < onsets.length ? onsets[i + 1] : this.phraseSteps) - o)
-
-    const cands = await Promise.resolve(this.registry.candidates(context, 12))
-    let first = context
-    let firstExplanation: Progression['slots'][number]['explanation'] | undefined
-    if (cands.length > 0) {
-      const maxPrior = Math.max(...cands.map((c) => c.prior))
-      const recent = this.player.activeProgression.slots.slice(-4).map((s) => s.symbol)
-      const prevVoicing = chordToNotes(context, this.sonifier.options, null).notes
-      let bestTotal = -1
-      for (const c of cands) {
-        const candidateNotes = chordToNotes(c.symbol, this.sonifier.options, prevVoicing).notes
-        const breakdown = scoreChord(c.symbol, {
-          analysis,
-          key,
-          tension: this.tension,
-          prior: maxPrior > 0 ? c.prior / maxPrior : 0,
-          candidateNotes,
-          prevVoicing,
-          recent,
-        })
-        if (breakdown.total > bestTotal) {
-          bestTotal = breakdown.total
-          first = c.symbol
-          firstExplanation = {
-            reasons: explainResponseChord(c.symbol, key, breakdown, analysis),
-            breakdown,
-            prior: c.prior,
-            blendProfile: this.blendProfile(),
-          }
-        }
-      }
-    }
-
-    // Lock the scored response chord into slot 0 and let the model walk on.
-    const prior = makeProgression(
-      durations.map((d, i) =>
-        makeSlot(i === 0 ? first : '?', d, i === 0 ? 'response' : 'generated', { locked: i === 0 }),
-      ),
-    )
+  private async buildResponse(notes: CapturedNote[], _analysis: MelodyAnalysis): Promise<Progression | null> {
     const p = await this.scheduler.run((isCancelled) =>
-      generateProgression(
-        this.registry,
-        { seed: context, onsets, totalSteps: this.phraseSteps, prior, explain: { blendProfile: this.blendProfile() }, isCancelled },
-        this.emitter,
-      ),
+      harmonizePhrase(this.registry, {
+        notes,
+        onsets: this.phraseOnsets(),
+        totalSteps: this.phraseSteps,
+        seed: this.seed,
+        key: this.player.currentKey(),
+        tension: this.tension,
+        recent: this.player.activeProgression.slots.slice(-4).map((s) => s.symbol),
+        voicingOptions: this.sonifier.options,
+        blendProfile: this.blendProfile(),
+        isCancelled,
+      }),
     )
     if (!p) return null
-    const response = makeProgression(
-      p.slots.map((s, i) => ({
-        ...s,
-        locked: false,
-        source: 'response' as const,
-        ...(i === 0 && firstExplanation ? { explanation: firstExplanation } : {}),
-      })),
-    )
-    this.player.setProgression(response, 'cycle') // land exactly at the boundary
-    this.seed = chainTail(response, this.seed)
-    return response
+    this.player.setProgression(p, 'cycle') // land exactly at the boundary
+    this.seed = chainTail(p, this.seed)
+    return p
   }
 
   /** Stopped-state seeding: ask the model for a reply and audition it (V1). */

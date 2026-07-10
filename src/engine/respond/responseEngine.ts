@@ -17,18 +17,19 @@
  *   ready      commitment served; response keeps playing until New Listen
  */
 
-import { STEPS_PER_BAR } from '../player/templates'
+import { STEPS_PER_BAR, STEPS_PER_BEAT } from '../player/templates'
 import { PhraseCapture } from './phraseCapture'
 import { analyzeMelody } from './melodyAnalysis'
-import type { MelodyAnalysis, RespondPhase } from './types'
+import type { CapturedNote, MelodyAnalysis, RespondPhase } from './types'
 import type { Progression } from '../progression/types'
 
 export interface RespondEffects {
   /** Mute/unmute playback (grid keeps running). */
   mute(on: boolean): void
-  /** Generate a response from the analysis and STAGE it at the next
+  /** Generate a response from the captured notes (raw, phrase-relative —
+   * per-slot harmonization segments them) and STAGE it at the next
    * boundary. Resolves when staged (null = failed/cancelled). */
-  generateResponse(analysis: MelodyAnalysis): Promise<Progression | null>
+  generateResponse(notes: CapturedNote[], analysis: MelodyAnalysis): Promise<Progression | null>
   onPhaseChange?(phase: RespondPhase, engine: RespondEngine): void
 }
 
@@ -116,12 +117,16 @@ export class RespondEngine {
   onStep(stepAbs: number): void {
     if (this.phase !== 'listening' || this.windowStart < 0) return
     this.progressSteps = Math.min(this.phraseSteps, stepAbs - this.windowStart + 1)
-    // Early kickoff: one bar before the close (clamped for short phrases),
+    // Early kickoff: one BEAT before the close (clamped for short phrases),
     // from the notes played SO FAR — never ahead of what has been heard.
-    const kickAt = this.windowStart + Math.max(this.phraseSteps - STEPS_PER_BAR, Math.ceil(this.phraseSteps / 2))
+    // A beat leaves the per-slot walk enough time to stage before the
+    // boundary while hearing almost the whole phrase; if generation misses
+    // anyway, the muted 'analyzing' cycle fallback catches it.
+    const kickAt = this.windowStart + Math.max(this.phraseSteps - STEPS_PER_BEAT, Math.ceil(this.phraseSteps / 2))
     if (!this.kicked && stepAbs >= kickAt) {
       this.kicked = true
-      this.kickGeneration(this.peekAnalysis())
+      const notes = this.capture.snapshot(this.windowStart, this.phraseSteps)
+      this.kickGeneration(notes, analyzeMelody(notes, this.phraseSteps))
     }
   }
 
@@ -133,11 +138,6 @@ export class RespondEngine {
   noteOff(note: number, stepAbs: number, msWithin: number): void {
     if (this.phase !== 'armed' && this.phase !== 'listening') return
     this.capture.noteOff(note, stepAbs, msWithin)
-  }
-
-  /** Analysis of the notes played so far, without consuming the buffer. */
-  private peekAnalysis(): MelodyAnalysis {
-    return analyzeMelody(this.capture.snapshot(this.windowStart, this.phraseSteps), this.phraseSteps)
   }
 
   private beginResponding(): void {
@@ -154,15 +154,15 @@ export class RespondEngine {
     if (!this.kicked) {
       // Very short phrase or missed kick — generate now from the full take.
       this.kicked = true
-      this.kickGeneration(this.lastAnalysis)
+      this.kickGeneration(notes, this.lastAnalysis)
     } else {
-      // The early kick used a partial analysis; keep the full one for the
-      // explanation panel. (The harmonic response is committed as staged.)
+      // The early kick used the notes heard up to that point; the full
+      // analysis above is kept for the explanation panel.
     }
   }
 
-  private kickGeneration(analysis: MelodyAnalysis): void {
-    void this.effects.generateResponse(analysis).then((p) => {
+  private kickGeneration(notes: CapturedNote[], analysis: MelodyAnalysis): void {
+    void this.effects.generateResponse(notes, analysis).then((p) => {
       if (this.phase !== 'listening' && this.phase !== 'analyzing') return // cancelled
       if (p) {
         this.generationDone = true

@@ -78,6 +78,12 @@ Tracked per milestone below.
 ### M11 — persistence, docs, hardening (`a0331a8`, `905a408`, +final)
 - `state/persistence.ts` (`autoharm.v2.settings`, version 2, schema-checked, restored through real actions, debounced saves); README rewritten user-first; `docs/V2_MANUAL_TEST_CHECKLIST.md`.
 
+### V2.1 — per-slot melody scoring in Respond
+- `engine/respond/harmonizer.ts`: the captured phrase is segmented by the response's slot boundaries (notes clipped to their overlap; steps stay phrase-relative so metric weights hold) and EVERY slot's candidates are scored against its own segment, with voice-leading threaded through the picked voicings and novelty accumulating across the walk. Every response card carries its own breakdown + segment-specific reasons. Replaces the V2.0 "score slot 0, walk the rest" scheme (runtime.buildResponse is a thin harmonizer call; the respond effect passes raw captured notes).
+- Scoring rebalance found via the new tests: an exact repeat's zero-movement voice-leading reward used to cancel the novelty penalty, so near-ties vamped forever — immediate-repeat novelty is now 0.15 and weights shifted (VL .15→.12, novelty .10→.13). Repeats stay possible when the melody clearly demands them.
+- Early kick moved from one BAR to one BEAT before the window close (min half-phrase): the harmonization hears ~28/32 steps of a 2-bar phrase instead of 16/32; the muted analyzing-cycle fallback still covers slow generation.
+- Browser-verified: C/E/G arpeggio in bar 1 + D/F/A in bar 2 → A:min ("Supports C, E"), E:min ("Supports G, E"), F:maj ("Supports F"), D:min ("Supports A") — last-bar melody reaching the response is the beat-early kick at work.
+
 ## Known limitations
 
 - 4/4 meter only; phrase lengths are multiples of half a bar (8 steps) plus custom fractional bars.

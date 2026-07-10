@@ -77,11 +77,13 @@ export function cadenceFit(symbol: string, analysis: MelodyAnalysis, key: string
 }
 
 /** Anti-pathological-repetition, Hold-respecting (callers skip when holding):
- * same as the immediately previous chord 0.3; within the recent window 0.7;
- * fresh 1.0. Repeats are DISCOURAGED, never banned. */
+ * same as the immediately previous chord 0.15 (low enough that its own
+ * zero-movement voice-leading reward can't cancel the penalty on a tie);
+ * within the recent window 0.7; fresh 1.0. Repeats are DISCOURAGED, never
+ * banned — a clearly better melody fit still justifies one. */
 export function noveltyFit(symbol: string, recent: string[]): number {
   if (recent.length === 0) return 1
-  if (recent[recent.length - 1] === symbol) return 0.3
+  if (recent[recent.length - 1] === symbol) return 0.15
   return recent.slice(-4).includes(symbol) ? 0.7 : 1
 }
 
