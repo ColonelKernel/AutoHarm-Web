@@ -219,3 +219,61 @@ describe('notation bridge + simplifier', () => {
     expect(simplifyChord('C')).toBe(INVALID_CHORD) // bare root note
   })
 })
+
+describe('NeuralEngine.candidates (peek)', () => {
+  async function makeEngine(logitsByCall: number[][]) {
+    const { NeuralEngine } = await import('../src/engine/neural/neuralEngine')
+    const { fn, calls } = stubForward(logitsByCall)
+    const engine = new NeuralEngine('rnn', vocab, { run: (t, h) => fn(t, h ?? null) }, {
+      rng: mulberry32(3),
+      temperature: 1.0,
+      excludeInput: true,
+    })
+    return { engine, calls }
+  }
+
+  it('returns the top-k softmax without specials, sorted desc', async () => {
+    // chords: C:maj(idx3) logit 2, G:7(4) logit 3, A:min(5) logit 1
+    const { engine } = await makeEngine([[9, 9, 9, 2, 3, 1]])
+    const cands = await engine.candidates('C:maj', false, 24)
+    // C:maj excluded (cold start excludeInput), so: G:7 then A:min
+    expect(cands.map((c) => c.symbol)).toEqual(['G:7', 'A:min'])
+    expect(cands[0].prior).toBeGreaterThan(cands[1].prior)
+    const sum = cands.reduce((n, c) => n + c.prior, 0)
+    expect(sum).toBeCloseTo(1, 9)
+  })
+
+  it('does not advance session state (pure peek)', async () => {
+    const { engine, calls } = await makeEngine([[0, 0, 0, 1, 2, 3]])
+    await engine.candidates('C:maj', true)
+    expect(engine.session.hidden).toBeNull() // untouched
+    expect(engine.session.userSteps).toBe(0)
+    expect(engine.session.tokenTrace).toEqual([])
+    expect(calls.length).toBe(1) // exactly one forward, no auto-feed
+  })
+
+  it('uses the carried hidden mid-session and forwards only [idx]', async () => {
+    const { engine, calls } = await makeEngine([
+      [0, 0, 0, 5, 1, 1], // sample step 1
+      [0, 0, 0, 1, 5, 1], // auto-feed
+      [0, 0, 0, 1, 1, 5], // the peek
+    ])
+    await engine.sample('C:maj', true) // establishes hidden
+    const before = engine.session.hidden
+    const cands = await engine.candidates('G:7', true)
+    expect(cands.length).toBeGreaterThan(0)
+    expect(engine.session.hidden).toBe(before) // still the same object
+    const peek = calls[calls.length - 1]
+    expect(peek.tokens.length).toBe(1) // [idx] only — hidden carries context
+    expect(peek.hidden).toBe(before)
+  })
+
+  it('returns [] for unknown chords and on runner failure', async () => {
+    const { engine } = await makeEngine([[0, 0, 0, 1, 1, 1]])
+    expect(await engine.candidates('Zz:wat', false)).toEqual([])
+    const broken = new (await import('../src/engine/neural/neuralEngine')).NeuralEngine(
+      'rnn', vocab, { run: () => Promise.reject(new Error('boom')) }, { rng: mulberry32(1) },
+    )
+    expect(await broken.candidates('C:maj', false)).toEqual([])
+  })
+})

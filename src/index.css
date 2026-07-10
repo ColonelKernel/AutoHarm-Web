@@ -178,6 +178,15 @@ body {
 .cc-actions button.active { color: var(--accent-2); }
 .cc-actions button:disabled { opacity: 0.3; }
 
+.queued-badge {
+  align-self: center;
+  font-size: 12px;
+  color: var(--accent-2);
+  border: 1px solid #7a5230;
+  border-radius: 14px;
+  padding: 3px 10px;
+}
+
 .status-line {
   display: flex;
   gap: 12px;

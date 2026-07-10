@@ -236,6 +236,7 @@ function ActionBar() {
       <button disabled={!s.canRedo} onClick={s.redo} title="Redo (Cmd/Ctrl+Shift+Z)">
         ↪ Redo
       </button>
+      {s.variationQueued && <span className="queued-badge">Variation queued ⏳</span>}
       <div className="control compact" style={{ marginLeft: 'auto' }}>
         <label>Display</label>
         <select value={s.displayMode} onChange={(e) => s.setDisplayMode(e.target.value as DisplayMode)}>

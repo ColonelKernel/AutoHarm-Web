@@ -20,10 +20,24 @@ export interface SampleResultLike {
   error?: string | null
 }
 
-/** What generation needs from a model (matches ModelRegistry.sample). */
+export interface CandidateLike {
+  symbol: string
+  prior: number
+}
+
+/** What generation needs from a model (matches ModelRegistry). `candidates`
+ * is optional — when present it powers context-aware picks toward locked
+ * successors; without it the walk falls back to plain sampling. */
 export interface ChordSampler {
   sample(chord: string): Promise<SampleResultLike> | SampleResultLike
+  candidates?(chord: string, limit?: number): Promise<CandidateLike[]> | CandidateLike[]
 }
+
+/** Lookahead breadth when approaching a locked chord (keeps neural cost
+ * bounded: each considered candidate costs one extra forward pass). */
+const LOOKAHEAD_CANDIDATES = 8
+/** Unseen transitions are rare, not impossible — floor, don't zero. */
+const LOOKAHEAD_FLOOR = 1e-4
 
 export interface GenerateOptions {
   /** Chord the chain starts from (last handled chord / selected seed). */
@@ -67,21 +81,46 @@ export async function generateProgression(
 
     let symbol = chain
     let prior: number | null | undefined
+    let approached: string | null = null
     try {
-      const res = await sampler.sample(chain)
-      if (opts.isCancelled?.()) return null
-      if (res.output && !res.error) {
-        symbol = res.output
-        prior = res.probability
-      } else if (res.error) {
-        emitter?.emit({ type: 'error', code: String(res.error) })
+      // Context-aware pick: when the NEXT slot is locked, choose the
+      // candidate that both fits here (own prior) and leads convincingly
+      // into the locked chord (one-step lookahead transition prior).
+      const nextLocked =
+        opts.prior?.slots[i + 1]?.locked && sampler.candidates ? opts.prior.slots[i + 1].symbol : null
+      if (nextLocked) {
+        const cands = await sampler.candidates!(chain, LOOKAHEAD_CANDIDATES)
+        if (opts.isCancelled?.()) return null
+        let bestScore = -1
+        for (const c of cands) {
+          const nexts = await sampler.candidates!(c.symbol, 24)
+          if (opts.isCancelled?.()) return null
+          const into = nexts.find((n) => n.symbol === nextLocked)?.prior ?? LOOKAHEAD_FLOOR
+          const score = c.prior * into
+          if (score > bestScore) {
+            bestScore = score
+            symbol = c.symbol
+            prior = c.prior
+          }
+        }
+        if (bestScore >= 0) approached = nextLocked
+      }
+      if (!approached) {
+        const res = await sampler.sample(chain)
+        if (opts.isCancelled?.()) return null
+        if (res.output && !res.error) {
+          symbol = res.output
+          prior = res.probability
+        } else if (res.error) {
+          emitter?.emit({ type: 'error', code: String(res.error) })
+        }
       }
     } catch (err) {
       emitter?.emit({ type: 'error', code: String((err as Error)?.message || err) })
     }
 
     const explanation: ChordExplanation = {
-      reasons: [],
+      reasons: approached ? [`Chosen to lead into the locked ${approached}`] : [],
       ...(opts.explain?.blendProfile ? { blendProfile: opts.explain.blendProfile } : {}),
       ...(prior != null ? { prior } : {}),
     }

@@ -17,6 +17,7 @@ export type PlayerEvent =
   | { type: 'cycle'; index: number; step: number; at?: number } // phrase wrapped
   | { type: 'slotOnset'; slotId: string; at?: number } // a slot's chord struck
   | { type: 'progressionApplied'; progression: Progression } // staged swap landed
+  | { type: 'staged'; pending: boolean } // a variation is queued for the boundary
   | { type: 'genProgress'; done: number; total: number } // offline generation
 
 export type PlayerEventListener = (e: PlayerEvent) => void

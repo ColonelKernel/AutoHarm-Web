@@ -8,7 +8,7 @@
  * `fromJazznet`-ed back, so flat-root chords (Bb) round-trip correctly.
  */
 
-import type { MarkovEngine } from './markov/markovEngine'
+import type { CandidateChord, MarkovEngine } from './markov/markovEngine'
 import { DEFAULT_MODEL, DEFAULT_SESSION_MODE, MODELS, SESSION_MODES, type ModelName, type SessionMode } from './markov/config'
 import { NeuralEngine } from './neural/neuralEngine'
 import { JazzNetVocab, type VocabJson } from './neural/vocab'
@@ -152,7 +152,22 @@ export class ModelRegistry {
       output: res.output ? fromJazznet(res.output) : res.output,
     }))
   }
+
+  /** Next-chord distribution from the ACTIVE model (notation bridged for the
+   * neural engines; a peek — never advances session state). */
+  candidates(rawInput: string, limit = 24): CandidateChord[] | Promise<CandidateChord[]> {
+    const name = this.activeName
+    if (name === 'markov') return this.markov.candidates(rawInput, limit)
+    const engine = this.engineFor(name)
+    if (!engine) return []
+    const session = this.effectiveSession(name, this.sessionModeValue)
+    return engine
+      .candidates(toJazznet(rawInput.trim()), session, limit)
+      .then((cs) => cs.map((c) => ({ ...c, symbol: fromJazznet(c.symbol) })))
+  }
 }
+
+export type { CandidateChord }
 
 /** Default browser loader: fetch vocab.json, compile the ONNX graph. */
 async function defaultNeuralLoader(

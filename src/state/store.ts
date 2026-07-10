@@ -60,6 +60,7 @@ interface AppState {
   selectedSlotId: string | null
   canUndo: boolean
   canRedo: boolean
+  variationQueued: boolean
 
   // generator dials
   color: number
@@ -208,6 +209,7 @@ export const useStore = create<AppState>((set, get) => ({
   selectedSlotId: null,
   canUndo: false,
   canRedo: false,
+  variationQueued: false,
 
   color: 0.5,
   adventure: 0.35,
@@ -307,6 +309,9 @@ export const useStore = create<AppState>((set, get) => ({
         }
         case 'slotOnset':
           set({ playingSlotId: e.slotId })
+          break
+        case 'staged':
+          set({ variationQueued: e.pending })
           break
       }
     })

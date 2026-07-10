@@ -82,13 +82,13 @@ export class ProgressionPlayer {
   setProgression(p: Progression, when: SwapTiming = 'now'): void {
     if (p.slots.length === 0 || p.totalSteps <= 0) return
     if (when === 'now' || !this.state.active) {
+      this.setStaged(null)
       this.apply(p)
-      this.staged = null
       // Keep the phrase position meaningful under the new length.
       if (this.state.pos >= 0) this.state.pos = this.state.pos % p.totalSteps
       return
     }
-    this.staged = { p, when }
+    this.setStaged({ p, when })
   }
 
   /** Stage a progression to land at the next phrase wrap (variation/response). */
@@ -97,7 +97,14 @@ export class ProgressionPlayer {
   }
 
   clearStaged(): void {
-    this.staged = null
+    this.setStaged(null)
+  }
+
+  /** Track staging + tell the UI ("Variation queued"). */
+  private setStaged(v: { p: Progression; when: 'bar' | 'cycle' } | null): void {
+    const had = this.staged !== null
+    this.staged = v
+    if (had !== (v !== null)) this.emitter.emit({ type: 'staged', pending: v !== null })
   }
 
   private apply(p: Progression): void {
@@ -127,7 +134,7 @@ export class ProgressionPlayer {
     const s = this.state
     if (!s.active) return // idempotent — avoids playoff/toggle feedback loops
     s.active = false
-    this.staged = null
+    this.setStaged(null)
     this.sonifier.resetVoicingHistory()
     this.emitter.emit({ type: 'stop', at }) // silence held notes
     this.emitter.emit({ type: 'playoff' }) // stop the transport clock
@@ -144,7 +151,7 @@ export class ProgressionPlayer {
     // Structural edits land on the next bar downbeat, position preserved.
     if (this.staged?.when === 'bar' && pos % STEPS_PER_BAR === 0 && pos < this.plan.totalSteps) {
       const p = this.staged.p
-      this.staged = null
+      this.setStaged(null)
       this.apply(p)
       pos = pos % this.plan.totalSteps
     }
@@ -157,7 +164,7 @@ export class ProgressionPlayer {
       }
       if (this.staged) {
         const p = this.staged.p
-        this.staged = null
+        this.setStaged(null)
         this.apply(p)
       }
       pos = 0
