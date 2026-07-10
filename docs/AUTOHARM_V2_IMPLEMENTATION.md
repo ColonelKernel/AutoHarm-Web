@@ -88,5 +88,5 @@ Tracked per milestone below.
 ## Verification log
 
 - Baseline: 84 tests / build clean (recorded above).
-- Final: **180 tests / 22 files**, `tsc -b && vite build` clean, no console errors.
+- Final: **168 tests / 20 files**, `tsc -b && vite build` clean, no console errors.
 - Browser-verified on the dev build: lock->variation preserves locks; undo/redo single-press; roman numerals live (Eb:maj7 in C = bIIImaj7); presets land macros exactly (Neo-Soul -> charleston + 60% swing); Lab edit -> macro Custom -> reclaim; Respond full loop at 240 BPM (0 notes sounded during capture, response on the closing downbeat, 2-rep commitment = 3998 ms, READY holds, slot-0 reasons correct); rhythm grid toggle/reset; Test-connection report; Perform view; persistence restore (Dark Cinematic + key mode, no auto-play); edited-progression playback == export (.mid parsed: onsets beats 0/2, Eb:maj pcs + tension-added 7th); mobile 375px no horizontal overflow.
