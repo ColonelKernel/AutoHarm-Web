@@ -72,10 +72,21 @@ Tracked per milestone below.
 - Reroll transport button = Generate Variation semantics (locked preserved).
 - Respond: response length/rhythm follow the current phrase/rhythm settings; slot 0 is the scored "response chord", later slots are model-walked (spec §26 phrase-level depth).
 
+### M9-M10 — rhythm editor, connections, perform (`ff27c94`)
+- `engine/rhythm/customGrid.ts` (toggle >=1 invariant, rotate, bounded randomize) + clickable grid buttons in Lab; runtime.testConnection (C major, 700ms guaranteed release, honest report); header ConnectionChip; PerformView (56px targets, shared store/runtime).
+
+### M11 — persistence, docs, hardening (`a0331a8`, `905a408`, +final)
+- `state/persistence.ts` (`autoharm.v2.settings`, version 2, schema-checked, restored through real actions, debounced saves); README rewritten user-first; `docs/V2_MANUAL_TEST_CHECKLIST.md`.
+
 ## Known limitations
 
-- 4/4 meter only; phrase lengths are multiples of half a bar (8 steps) plus custom step counts.
+- 4/4 meter only; phrase lengths are multiples of half a bar (8 steps) plus custom fractional bars.
+- Respond capture maps note times through the step timeline; notes in the final ~150 ms of a window (the lookahead horizon) may land past the close under heavy main-thread load.
+- Neural response generation may add one muted "analyzing" cycle when the model is slower than the phrase remainder (markov answers on the closing downbeat).
+- V1's live next-onset MIDI steering is now a boundary-queued reroll (documented behavior change).
 
 ## Verification log
 
 - Baseline: 84 tests / build clean (recorded above).
+- Final: **180 tests / 22 files**, `tsc -b && vite build` clean, no console errors.
+- Browser-verified on the dev build: lock->variation preserves locks; undo/redo single-press; roman numerals live (Eb:maj7 in C = bIIImaj7); presets land macros exactly (Neo-Soul -> charleston + 60% swing); Lab edit -> macro Custom -> reclaim; Respond full loop at 240 BPM (0 notes sounded during capture, response on the closing downbeat, 2-rep commitment = 3998 ms, READY holds, slot-0 reasons correct); rhythm grid toggle/reset; Test-connection report; Perform view; persistence restore (Dark Cinematic + key mode, no auto-play); edited-progression playback == export (.mid parsed: onsets beats 0/2, Eb:maj pcs + tension-added 7th); mobile 375px no horizontal overflow.
