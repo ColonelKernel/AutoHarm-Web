@@ -21,10 +21,12 @@ import type { Emitter } from '../events'
 import type { Sonifier } from './sonifier'
 import { compilePlan } from '../progression/operations'
 import type { PlaybackPlan, Progression } from '../progression/types'
-import { STEPS_PER_BAR, ROOT_NAMES } from './templates'
+import { STEPS_PER_BAR, STEPS_PER_BEAT, ROOT_NAMES } from './templates'
 import { modeFromValue, nextMode, keyRootFromDial, type PlayerMode } from '../voicing/performanceMap'
 
 export type SwapTiming = 'now' | 'bar' | 'cycle'
+/** Who caused a progression replacement — decides whether it is undoable. */
+export type SwapOrigin = 'user' | 'auto'
 
 export interface ProgressionPlayerState {
   active: boolean
@@ -59,7 +61,7 @@ export class ProgressionPlayer {
 
   private progression: Progression = { slots: [], totalSteps: 0 }
   private plan: PlaybackPlan = { onsetSteps: [], onsetToSlot: new Map(), totalSteps: 0 }
-  private staged: { p: Progression; when: 'bar' | 'cycle' } | null = null
+  private staged: { p: Progression; when: 'bar' | 'cycle'; origin: SwapOrigin } | null = null
 
   /** Called when the current key changes (root or mode dials/pads). */
   onKeyChange: ((key: string) => void) | null = null
@@ -79,21 +81,21 @@ export class ProgressionPlayer {
 
   /* --- progression handoff -------------------------------------------------- */
 
-  setProgression(p: Progression, when: SwapTiming = 'now'): void {
+  setProgression(p: Progression, when: SwapTiming = 'now', origin: SwapOrigin = 'user'): void {
     if (p.slots.length === 0 || p.totalSteps <= 0) return
     if (when === 'now' || !this.state.active) {
       this.setStaged(null)
-      this.apply(p)
+      this.apply(p, origin)
       // Keep the phrase position meaningful under the new length.
       if (this.state.pos >= 0) this.state.pos = this.state.pos % p.totalSteps
       return
     }
-    this.setStaged({ p, when })
+    this.setStaged({ p, when, origin })
   }
 
   /** Stage a progression to land at the next phrase wrap (variation/response). */
-  stageNext(p: Progression): void {
-    this.setProgression(p, 'cycle')
+  stageNext(p: Progression, origin: SwapOrigin = 'user'): void {
+    this.setProgression(p, 'cycle', origin)
   }
 
   clearStaged(): void {
@@ -101,16 +103,21 @@ export class ProgressionPlayer {
   }
 
   /** Track staging + tell the UI ("Variation queued"). */
-  private setStaged(v: { p: Progression; when: 'bar' | 'cycle' } | null): void {
+  private setStaged(v: { p: Progression; when: 'bar' | 'cycle'; origin: SwapOrigin } | null): void {
     const had = this.staged !== null
     this.staged = v
     if (had !== (v !== null)) this.emitter.emit({ type: 'staged', pending: v !== null })
   }
 
-  private apply(p: Progression): void {
+  private apply(p: Progression, origin: SwapOrigin): void {
     this.progression = p
     this.plan = compilePlan(p)
-    this.emitter.emit({ type: 'progressionApplied', progression: p })
+    // A replacement can be shorter; keep the slot cursors in range so hold
+    // and the next onset lookup never index a removed slot.
+    const last = Math.max(0, p.slots.length - 1)
+    this.state.currentSlotIndex = Math.min(this.state.currentSlotIndex, last)
+    this.state.heldSlotIndex = Math.min(this.state.heldSlotIndex, last)
+    this.emitter.emit({ type: 'progressionApplied', progression: p, origin })
   }
 
   /* --- transport ------------------------------------------------------------ */
@@ -134,6 +141,11 @@ export class ProgressionPlayer {
     const s = this.state
     if (!s.active) return // idempotent — avoids playoff/toggle feedback loops
     s.active = false
+    // A 'bar'-staged progression is a USER EDIT the store already shows
+    // optimistically. Dropping it on stop would leave the timeline and the
+    // engine permanently disagreeing, so commit it. A 'cycle'-staged one is
+    // an autonomous variation the store never adopted — discard it.
+    if (this.staged?.when === 'bar') this.apply(this.staged.p, this.staged.origin)
     this.setStaged(null)
     this.sonifier.resetVoicingHistory()
     this.emitter.emit({ type: 'stop', at }) // silence held notes
@@ -150,9 +162,9 @@ export class ProgressionPlayer {
 
     // Structural edits land on the next bar downbeat, position preserved.
     if (this.staged?.when === 'bar' && pos % STEPS_PER_BAR === 0 && pos < this.plan.totalSteps) {
-      const p = this.staged.p
+      const { p, origin } = this.staged
       this.setStaged(null)
-      this.apply(p)
+      this.apply(p, origin)
       pos = pos % this.plan.totalSteps
     }
 
@@ -163,9 +175,9 @@ export class ProgressionPlayer {
         return
       }
       if (this.staged) {
-        const p = this.staged.p
+        const { p, origin } = this.staged
         this.setStaged(null)
-        this.apply(p)
+        this.apply(p, origin)
       }
       pos = 0
     }
@@ -175,6 +187,16 @@ export class ProgressionPlayer {
     }
     s.pos = pos
 
+    // Phrase position for the UI, once per beat rather than once per step.
+    if (pos % STEPS_PER_BEAT === 0) {
+      this.emitter.emit({
+        type: 'beat',
+        posSteps: pos,
+        totalSteps: this.plan.totalSteps,
+        cycleIndex: s.cycleIndex,
+      })
+    }
+
     const slotIdx = this.plan.onsetToSlot.get(pos)
     if (slotIdx === undefined) return // not an onset step
     if (s.muted) return // respond-listening: time advances, nothing sounds
@@ -182,7 +204,11 @@ export class ProgressionPlayer {
     if (s.hold) {
       // Vamp: re-strike the latched chord at every onset; position advances.
       const held = this.progression.slots[s.heldSlotIndex] ?? this.progression.slots[slotIdx]
-      if (held) this.sonifier.sonifyChord(held.symbol, 'hold', at)
+      if (!held) return
+      // Announce the LATCHED slot so the timeline highlights the chord that is
+      // actually sounding, not the one the playhead happens to be passing.
+      this.emitter.emit({ type: 'slotOnset', slotId: held.id, at })
+      this.sonifier.sonifyChord(held.symbol, 'hold', at)
       return
     }
 

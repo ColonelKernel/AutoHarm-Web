@@ -8,6 +8,7 @@
 
 import {
   makeProgression,
+  makeSlot,
   newSlotId,
   type PlaybackPlan,
   type Progression,
@@ -103,6 +104,42 @@ export function compilePlan(p: Progression): PlaybackPlan {
     step += slot.durationSteps
   })
   return { onsetSteps, onsetToSlot, totalSteps: step }
+}
+
+/**
+ * Re-index a prior progression onto a DIFFERENT onset grid, matching slots by
+ * their onset STEP rather than their index. Used when the phrase length or the
+ * harmonic rhythm changed underneath a variation: index-matching would silently
+ * shift every lock (or drop the tail), so a lock is honored only where its
+ * exact step survives in the new grid.
+ *
+ * Returns a progression shaped like `onsets` (one slot per onset) plus the
+ * number of locks that could not be placed.
+ */
+export function alignPriorToOnsets(
+  prior: Progression,
+  onsets: number[],
+  totalSteps: number,
+): { aligned: Progression; droppedLocks: number } {
+  const priorPlan = compilePlan(prior)
+  const byStep = new Map<number, ProgressionSlot>()
+  priorPlan.onsetSteps.forEach((step, i) => byStep.set(step, prior.slots[i]))
+
+  const target = new Set(onsets)
+  let droppedLocks = 0
+  for (const [step, slot] of byStep) {
+    if (slot.locked && !target.has(step)) droppedLocks += 1
+  }
+
+  const slots = onsets.map((step, i) => {
+    const duration = Math.max(1, (i + 1 < onsets.length ? onsets[i + 1] : totalSteps) - step)
+    const hit = byStep.get(step)
+    // Only LOCKED slots carry over. Unlocked ones are regenerated anyway, so
+    // they become placeholders — the walk overwrites both symbol and id.
+    if (hit?.locked) return { ...hit, durationSteps: duration }
+    return makeSlot(hit?.symbol ?? '', duration, 'generated')
+  })
+  return { aligned: makeProgression(slots), droppedLocks }
 }
 
 /** The slot sounding at `stepInPhrase` (the latest onset at or before it). */

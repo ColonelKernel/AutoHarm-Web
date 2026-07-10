@@ -50,6 +50,7 @@ interface AppState {
   loadError: string | null
   status: string
   lastError: string | null
+  notice: string | null // non-fatal consequence of an action (e.g. locks released)
   currentChord: string
   currentNotes: number[]
   history: HistoryEntry[]
@@ -63,6 +64,9 @@ interface AppState {
   progression: Progression
   playingSlotId: string | null // slot currently sounding (timeline highlight)
   generating: boolean
+  playPosSteps: number // position within the phrase (-1 when stopped)
+  playTotalSteps: number
+  playCycle: number
   appMode: AppMode
   viewMode: ViewMode
   displayMode: DisplayMode
@@ -133,7 +137,7 @@ interface AppState {
   enableMidi(): Promise<void>
   togglePlay(): void
   generateNew(): Promise<void>
-  reroll(): void
+  reroll(): Promise<void>
   setAppMode(m: AppMode): void
   setViewMode(v: ViewMode): void
   setDisplayMode(d: DisplayMode): void
@@ -160,6 +164,7 @@ interface AppState {
   resetRhythm(): void
   testConnection(): void
   testReport: string | null
+  dismissNotice(): void
   panic(): void
   audition(): void
   exportMidi(): void
@@ -235,6 +240,7 @@ export const useStore = create<AppState>((set, get) => ({
   loadError: null,
   status: 'loading',
   lastError: null,
+  notice: null,
   currentChord: '—',
   currentNotes: [],
   history: [],
@@ -247,6 +253,9 @@ export const useStore = create<AppState>((set, get) => ({
   progression: makeProgression([]),
   playingSlotId: null,
   generating: false,
+  playPosSteps: -1,
+  playTotalSteps: 0,
+  playCycle: 0,
   appMode: 'generate',
   viewMode: 'quick',
   displayMode: 'both',
@@ -338,7 +347,7 @@ export const useStore = create<AppState>((set, get) => ({
           set({ currentNotes: [] })
           break
         case 'playoff':
-          set({ playing: false })
+          set({ playing: false, playPosSteps: -1, playingSlotId: null })
           break
         case 'error':
           set({ lastError: e.detail ? `${e.code}: ${e.detail}` : e.code })
@@ -351,18 +360,30 @@ export const useStore = create<AppState>((set, get) => ({
           // set the store synchronously and echo back the SAME object, so
           // an identity match means nothing to record.
           const cur = get().progression
-          if (e.progression !== cur) {
-            if (cur.slots.length > 0) editHistory.push(cur)
-            set({
-              progression: e.progression,
-              canUndo: editHistory.canUndo,
-              canRedo: editHistory.canRedo,
-            })
-          }
+          if (e.progression === cur) break
+          // Autonomous replacements (regen-mode variations, Respond answers,
+          // MIDI-steered rerolls) are performance events, not edits — they
+          // must not push onto the undo stack or clear the redo branch.
+          if (e.origin === 'user' && cur.slots.length > 0) editHistory.push(cur)
+          const ids = new Set(e.progression.slots.map((sl) => sl.id))
+          set((s) => ({
+            progression: e.progression,
+            canUndo: editHistory.canUndo,
+            canRedo: editHistory.canRedo,
+            // Regeneration mints new slot ids; a stale selection would show a
+            // blank explanation panel forever.
+            selectedSlotId: s.selectedSlotId && ids.has(s.selectedSlotId) ? s.selectedSlotId : null,
+          }))
           break
         }
+        case 'notice':
+          set({ notice: e.message })
+          break
         case 'slotOnset':
           set({ playingSlotId: e.slotId })
+          break
+        case 'beat':
+          set({ playPosSteps: e.posSteps, playTotalSteps: e.totalSteps, playCycle: e.cycleIndex })
           break
         case 'staged':
           set({ variationQueued: e.pending })
@@ -386,7 +407,7 @@ export const useStore = create<AppState>((set, get) => ({
       const s = get()
       switch (a.action) {
         case 'playtoggle': s.togglePlay(); break
-        case 'reroll': s.reroll(); break
+        case 'reroll': void s.reroll(); break
         case 'holdtoggle': s.setHold(!get().hold); break
         case 'modecycle': {
           const next = MODES[(MODES.indexOf(get().mode) + 1) % MODES.length]
@@ -433,9 +454,19 @@ export const useStore = create<AppState>((set, get) => ({
       rt.appMode = get().appMode
     }
 
-    // Persist preference changes (trailing debounce; cheap JSON).
+    // Persist preference changes (trailing debounce). The subscription fires
+    // on EVERY store patch, including per-step playingSlotId / respondProgress
+    // during playback — a naive debounce would be reset ~16x/sec and never
+    // fire. Gate on a cheap signature of the persisted fields only.
     let saveTimer: ReturnType<typeof setTimeout> | null = null
+    let lastSig = ''
     useStore.subscribe((s) => {
+      const sig =
+        `${s.appMode}|${s.viewMode}|${s.displayMode}|${s.activePresetId}|${s.keyRoot}|${s.keyMode}|` +
+        `${s.bpm}|${s.phraseSteps}|${s.repetitions}|${s.synthOn}|${s.synthVolume}|` +
+        `${s.macros.familiarity}|${s.macros.harmonicColor}|${s.macros.tension}|${s.macros.motion}`
+      if (sig === lastSig) return
+      lastSig = sig
       if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(() => {
         saveSettings({
@@ -655,6 +686,10 @@ export const useStore = create<AppState>((set, get) => ({
     get().setRhythm(get().rhythm) // back to the dial's template
   },
 
+  dismissNotice() {
+    set({ notice: null })
+  },
+
   testConnection() {
     const s = get()
     const outName = s.midiOutputs.find((p) => p.id === s.midiOutId)?.name ?? null
@@ -663,10 +698,12 @@ export const useStore = create<AppState>((set, get) => ({
     setTimeout(() => set({ testReport: null }), 4000)
   },
 
-  reroll() {
+  async reroll() {
     // Variation semantics: locked slots survive; queued to the boundary
     // while playing, immediate when stopped.
-    void getRuntime().generateVariation()
+    set({ generating: true })
+    await getRuntime().generateVariation('user')
+    set({ generating: false })
   },
 
   panic() {

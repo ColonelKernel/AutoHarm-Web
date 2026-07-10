@@ -27,6 +27,7 @@ export function analyzeMelody(notes: CapturedNote[], phraseSteps: number): Melod
   const mass = new Array<number>(12).fill(0)
   let lastOnset = -1
   let terminal: number | null = null
+  let terminalNote = -1 // MIDI number behind `terminal` — compare pitches, not classes
   let pitchSum = 0
   let lo = Infinity
   let hi = -Infinity
@@ -36,9 +37,14 @@ export function analyzeMelody(notes: CapturedNote[], phraseSteps: number): Melod
     const durationSteps = Math.max(0.25, (n.offStep ?? phraseSteps) - n.onStep)
     mass[pc] += durationSteps * metricWeight(n.onStep) * velocityWeight(n.velocity)
     if (n.onStep >= lastOnset) {
-      // Later onset wins; at an equal onset (a dyad) the higher note is
-      // heard as the melody — prefer it.
-      if (n.onStep > lastOnset || terminal === null || n.note > (terminal ?? -1)) terminal = pc
+      // Later onset wins; at an equal onset (a dyad) the higher note is heard
+      // as the melody. The comparison must be pitch-vs-pitch: comparing a MIDI
+      // number against the stored pitch class always wins, degrading the rule
+      // to "last captured note".
+      if (n.onStep > lastOnset || n.note > terminalNote) {
+        terminal = pc
+        terminalNote = n.note
+      }
       lastOnset = n.onStep
     }
     pitchSum += n.note

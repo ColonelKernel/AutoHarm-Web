@@ -53,9 +53,12 @@ describe('minor keys', () => {
   it('dominant function from the raised leading tone', () => {
     expect(rn('E:7', 'A:min')?.numeral).toBe('V7')
     expect(rn('E:7', 'A:min')?.func).toBe('dominant')
+    // Conventional spelling: the leading-tone chord is vii°, and the natural
+    // subtonic triad is VII — quality, not an accidental, distinguishes them.
     const dim = rn('G#:dim', 'A:min')!
-    expect(dim.numeral).toBe('#vii°')
-    expect(dim.diatonic).toBe(true) // raised leading tone admitted
+    expect(dim.numeral).toBe('vii°')
+    expect(dim.diatonic).toBe(true)
+    expect(rn('G:maj', 'A:min')?.numeral).toBe('VII')
   })
 })
 

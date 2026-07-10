@@ -16,7 +16,7 @@ import { MarkovEngine } from '../engine/markov/markovEngine'
 import { loadCorpora, type RawCorpora } from '../engine/markov/corpusLoader'
 import { colorWeights } from '../engine/markov/blend'
 import { Sonifier } from '../engine/player/sonifier'
-import { ProgressionPlayer } from '../engine/player/progressionPlayer'
+import { ProgressionPlayer, type SwapOrigin } from '../engine/player/progressionPlayer'
 import {
   DEFAULT_TEMPLATE_ID,
   ROOT_NAMES,
@@ -27,6 +27,7 @@ import {
   type RhythmPattern,
 } from '../engine/player/templates'
 import { chainTail } from '../engine/progression/generator'
+import { alignPriorToOnsets } from '../engine/progression/operations'
 import { GenerationScheduler } from '../engine/progression/scheduler'
 import { generateHarmonicRhythm } from '../engine/rhythm/harmonicRhythm'
 import type { Progression } from '../engine/progression/types'
@@ -184,10 +185,10 @@ export class Runtime {
    * tiles verbatim; otherwise the harmonic rhythm is GENERATED — per-bar
    * patterns drawn around the selected feel, with groove coherence and a
    * broadened final bar — fresh on every generation. */
-  private phraseOnsets(): number[] {
-    if (this.customPattern) return tileOnsets(this.customPattern, this.phraseSteps)
+  private phraseOnsets(totalSteps = this.phraseSteps): number[] {
+    if (this.customPattern) return tileOnsets(this.customPattern, totalSteps)
     const id = TEMPLATES[this.templateId] ? this.templateId : DEFAULT_TEMPLATE_ID
-    return generateHarmonicRhythm(this.genRng, { templateId: id, totalSteps: this.phraseSteps })
+    return generateHarmonicRhythm(this.genRng, { templateId: id, totalSteps })
   }
 
   /** The onset skeleton of an existing progression (variation keeps it, so
@@ -210,14 +211,16 @@ export class Runtime {
 
   /** Generate a fresh progression (locked slots NOT preserved). */
   async generateNew(): Promise<Progression | null> {
-    return this.runGeneration(undefined, this.seed)
+    return this.runGeneration(undefined, this.seed, 'user')
   }
 
-  /** Regenerate unlocked slots; locked slots survive (matched by order). */
-  async generateVariation(): Promise<Progression | null> {
+  /** Regenerate unlocked slots; locked slots survive (matched by order).
+   * `origin` distinguishes the user's Variation button from autonomous
+   * regen-mode / MIDI-steered variations, which must not enter undo history. */
+  async generateVariation(origin: SwapOrigin = 'user'): Promise<Progression | null> {
     const prior = this.player.activeProgression
-    if (prior.slots.length === 0) return this.generateNew()
-    return this.runGeneration(prior, chainTail(prior, this.seed))
+    if (prior.slots.length === 0) return this.runGeneration(undefined, this.seed, origin)
+    return this.runGeneration(prior, chainTail(prior, this.seed), origin)
   }
 
   /** Regenerate ONE slot: everything else is mask-locked for the walk, then
@@ -249,21 +252,49 @@ export class Runtime {
       }),
     )
     if (!p) return null
-    const locks = new Map(cur.slots.map((s) => [s.id, s.locked]))
+    // The walk reuses `cur`'s onsets, so slot i corresponds to cur.slots[i].
+    // Restore the real lock flags AND keep every id: the rerolled slot gets a
+    // fresh id from makeSlot, which would dangle the user's selection and
+    // blank the explanation panel for the chord they just rerolled.
     const fixed: Progression = {
-      slots: p.slots.map((s) => ({ ...s, locked: locks.get(s.id) ?? false })),
+      slots: p.slots.map((s, i) => ({
+        ...s,
+        id: cur.slots[i]?.id ?? s.id,
+        locked: cur.slots[i]?.locked ?? false,
+      })),
       totalSteps: p.totalSteps,
     }
-    this.player.setProgression(fixed, this.player.state.active ? 'cycle' : 'now')
+    this.player.setProgression(fixed, this.player.state.active ? 'cycle' : 'now', 'user')
     return fixed
   }
 
-  private async runGeneration(prior: Progression | undefined, seed: string): Promise<Progression | null> {
+  private async runGeneration(
+    prior: Progression | undefined,
+    seed: string,
+    origin: SwapOrigin = 'user',
+  ): Promise<Progression | null> {
     if (!this.loaded) return null
-    // A variation keeps the take's rhythm (locks keep index + timing);
-    // a fresh generation draws a fresh harmonic rhythm.
-    const onsets =
-      prior && prior.totalSteps === this.phraseSteps ? this.onsetsOf(prior) : this.phraseOnsets()
+    // A variation keeps the take's rhythm, so locks keep both index and
+    // timing. If the phrase length changed underneath it, the grids no longer
+    // correspond: re-align locks by onset STEP (index-matching would shift
+    // every lock), and say so when one can't be placed.
+    let onsets: number[]
+    let effectivePrior = prior
+    if (prior && prior.totalSteps === this.phraseSteps) {
+      onsets = this.onsetsOf(prior)
+    } else {
+      onsets = this.phraseOnsets()
+      if (prior) {
+        const { aligned, droppedLocks } = alignPriorToOnsets(prior, onsets, this.phraseSteps)
+        effectivePrior = aligned
+        if (droppedLocks > 0) {
+          this.emitter.emit({
+            type: 'notice',
+            message: `${droppedLocks} locked chord${droppedLocks === 1 ? '' : 's'} released — the new phrase has no chord at that position.`,
+          })
+        }
+      }
+    }
     const p = await this.scheduler.run((isCancelled) =>
       harmonizePhrase(this.registry, {
         notes: [], // no melody: scoring runs on prior/voice-leading/cadence/novelty
@@ -273,7 +304,7 @@ export class Runtime {
         key: this.player.currentKey(),
         tension: this.tension,
         recent: [],
-        prior,
+        prior: effectivePrior,
         pick: { mode: 'sample', rng: this.genRng },
         source: 'generated',
         voicingOptions: this.sonifier.options,
@@ -282,7 +313,7 @@ export class Runtime {
       }),
     )
     if (p) {
-      this.player.setProgression(p, this.player.state.active ? 'cycle' : 'now')
+      this.player.setProgression(p, this.player.state.active ? 'cycle' : 'now', origin)
       this.seed = chainTail(p, this.seed)
     }
     return p
@@ -291,7 +322,7 @@ export class Runtime {
   /** Apply a user EDIT (already computed by the progression ops) to playback.
    * Structural edits land on the next bar downbeat while playing. */
   applyEdit(p: Progression, structural: boolean): void {
-    this.player.setProgression(p, this.player.state.active && structural ? 'bar' : 'now')
+    this.player.setProgression(p, this.player.state.active && structural ? 'bar' : 'now', 'user')
   }
 
   /** True when every slot is untouched generator output — the "performable
@@ -329,7 +360,7 @@ export class Runtime {
   private maybeRegenerate(): boolean {
     if (!this.loaded) return false
     if (this.pristine()) {
-      void this.generateVariation()
+      void this.generateVariation('auto')
       return true
     }
     return false // takes effect on the next explicit Generate/Variation
@@ -346,7 +377,7 @@ export class Runtime {
   private onCycle(): void {
     if (this.respond.engaged || this.respond.phase === 'ready') return
     if (this.player.state.mode !== 'regen' || this.player.state.hold) return
-    void this.generateVariation()
+    void this.generateVariation('auto')
   }
 
   /* --- MIDI input routing ------------------------------------------------------ */
@@ -371,7 +402,7 @@ export class Runtime {
       // V2: a played note steers by seeding a variation at the boundary
       // (V1 steered the very next onset; documented behavior change).
       this.seed = symbol
-      void this.generateVariation()
+      void this.generateVariation('auto')
     } else {
       this.seedChord(symbol)
     }
@@ -395,6 +426,7 @@ export class Runtime {
 
   /** Arm a listen. Starts the transport if stopped so a boundary will come. */
   newListen(): boolean {
+    this.scheduler.invalidate() // an older listen's walk must not stage into this one
     this.respond.phraseSteps = this.phraseSteps
     const ok = this.respond.newListen()
     if (ok && !this.player.state.active) this.startTransport()
@@ -402,6 +434,9 @@ export class Runtime {
   }
 
   cancelListen(): void {
+    // Mirror stopTransport: a generation still in flight would otherwise
+    // resolve and stage its response into the live player after the abort.
+    this.scheduler.invalidate()
     this.respond.cancel()
   }
 
@@ -413,11 +448,16 @@ export class Runtime {
    * boundary.
    */
   private async buildResponse(notes: CapturedNote[], _analysis: MelodyAnalysis): Promise<Progression | null> {
+    // The response must match the window that was actually CAPTURED. The
+    // engine froze phraseSteps when the listen was armed; this.phraseSteps can
+    // have changed since (the user may move the phrase-length control while
+    // listening), which would answer a 2-bar phrase with a 4-bar progression.
+    const windowSteps = this.respond.phraseSteps
     const p = await this.scheduler.run((isCancelled) =>
       harmonizePhrase(this.registry, {
         notes,
-        onsets: this.phraseOnsets(),
-        totalSteps: this.phraseSteps,
+        onsets: this.phraseOnsets(windowSteps),
+        totalSteps: windowSteps,
         seed: this.seed,
         key: this.player.currentKey(),
         tension: this.tension,
@@ -428,7 +468,7 @@ export class Runtime {
       }),
     )
     if (!p) return null
-    this.player.setProgression(p, 'cycle') // land exactly at the boundary
+    this.player.setProgression(p, 'cycle', 'auto') // land exactly at the boundary
     this.seed = chainTail(p, this.seed)
     return p
   }

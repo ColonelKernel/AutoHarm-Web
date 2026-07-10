@@ -1,8 +1,15 @@
 /** Chord timeline — the progression as large editable cards.
  *
- * Every card action is a plain button (keyboard + screen-reader operable);
- * reordering is Move left / Move right, not drag-only. Lock and playing
- * states use icons + borders, never color alone.
+ * Accessibility shape: a real <ul>/<li> list. Every action is a plain button,
+ * so the whole card is reachable by keyboard; reordering is Move left / Move
+ * right, never drag-only. Selection follows focus, so a keyboard user tabbing
+ * through a card sees its explanation without an extra "select" control, and
+ * `aria-current` announces it. Lock and playing states carry an icon and a
+ * border, never colour alone.
+ *
+ * The six secondary actions are revealed on hover, focus-within, or selection.
+ * Sixteen cards x seven always-visible buttons was 112 competing targets; the
+ * lock stays visible because it is the concept Variation depends on.
  */
 
 import { useEffect, useRef, useState } from 'react'
@@ -22,6 +29,7 @@ export function durationLabel(steps: number): string {
 }
 
 const DURATION_CHOICES = [2, 4, 6, 8, 12, 16, 24, 32]
+const KEY_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B']
 
 function SymbolEditor({ slot, onCommit }: { slot: ProgressionSlot; onCommit: (v: string) => void }) {
   const [editing, setEditing] = useState(false)
@@ -29,16 +37,19 @@ function SymbolEditor({ slot, onCommit }: { slot: ProgressionSlot; onCommit: (v:
   const ref = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    // Seed the field when the editor OPENS. Watching slot.symbol here would
+    // clobber what the user is typing if a variation lands mid-edit.
     if (editing) {
       setValue(slot.symbol)
       ref.current?.select()
     }
-  }, [editing, slot.symbol])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing])
 
   if (!editing) {
     return (
       <button className="cc-symbol" title="Edit chord" onClick={() => setEditing(true)}>
-        {slot.symbol}
+        {slot.symbol || '—'}
       </button>
     )
   }
@@ -63,40 +74,66 @@ function SymbolEditor({ slot, onCommit }: { slot: ProgressionSlot; onCommit: (v:
 }
 
 function ChordCard({ slot, index, count }: { slot: ProgressionSlot; index: number; count: number }) {
-  const s = useStore()
-  const key = useStore((st) => `${['C', 'Db', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'][st.keyRoot]}:${st.keyMode}`)
-  const selected = s.selectedSlotId === slot.id
-  const playing = s.playingSlotId === slot.id
-  const roman = s.displayMode !== 'symbols' ? romanNumeral(slot.symbol, key) : null
+  const displayMode = useStore((s) => s.displayMode)
+  const selected = useStore((s) => s.selectedSlotId === slot.id)
+  const playing = useStore((s) => s.playingSlotId === slot.id)
+  const holding = useStore((s) => s.hold)
+  const generating = useStore((s) => s.generating)
+  const keyName = useStore((s) => `${KEY_NAMES[s.keyRoot]}:${s.keyMode}`)
+  const selectSlot = useStore((s) => s.selectSlot)
+  const editSlotSymbol = useStore((s) => s.editSlotSymbol)
+  const toggleSlotLock = useStore((s) => s.toggleSlotLock)
+  const setSlotDuration = useStore((s) => s.setSlotDuration)
+  const moveSlot = useStore((s) => s.moveSlot)
+  const deleteSlot = useStore((s) => s.deleteSlot)
+  const duplicateSlot = useStore((s) => s.duplicateSlot)
+  const rerollSlot = useStore((s) => s.rerollSlot)
+  const auditionSlot = useStore((s) => s.auditionSlot)
+
+  const roman = displayMode !== 'symbols' ? romanNumeral(slot.symbol, keyName) : null
+  const vamping = playing && holding
+  const state = vamping ? ', vamping' : playing ? ', playing' : ''
 
   return (
-    <div
+    <li
       className={
         'chord-card' +
         (selected ? ' selected' : '') +
         (playing ? ' playing' : '') +
+        (vamping ? ' vamping' : '') +
         (slot.locked ? ' locked' : '')
       }
-      role="group"
-      aria-label={`Chord ${index + 1}: ${slot.symbol}${slot.locked ? ', locked' : ''}`}
-      onClick={() => s.selectSlot(selected ? null : slot.id)}
+      aria-current={selected ? 'true' : undefined}
+      aria-label={`Chord ${index + 1} of ${count}: ${slot.symbol}${slot.locked ? ', locked' : ''}${state}`}
+      // Selection follows focus: tabbing into any control shows that chord's
+      // explanation, so the panel is reachable without a pointer. React maps
+      // onFocus to focusin, which bubbles from the card's inner buttons.
+      onFocus={() => selectSlot(slot.id)}
+      onClick={() => selectSlot(selected ? null : slot.id)}
     >
-      {s.displayMode !== 'symbols' && (
-        <div className="cc-roman">{roman?.numeral ?? ' '}</div>
-      )}
-      {s.displayMode !== 'roman' ? (
+      <div className="cc-top">
+        {displayMode !== 'symbols' && <span className="cc-roman">{roman?.numeral ?? ' '}</span>}
+        {playing && (
+          <span className="cc-play" aria-hidden="true" title={vamping ? 'Vamping (Hold)' : 'Playing'}>
+            {vamping ? '⟳' : '▶'}
+          </span>
+        )}
+      </div>
+
+      {displayMode !== 'roman' ? (
         <div onClick={(e) => e.stopPropagation()}>
-          <SymbolEditor slot={slot} onCommit={(v) => s.editSlotSymbol(slot.id, v)} />
+          <SymbolEditor slot={slot} onCommit={(v) => editSlotSymbol(slot.id, v)} />
         </div>
       ) : (
         <div className="cc-roman-only">{roman?.numeral ?? slot.symbol}</div>
       )}
-      <div onClick={(e) => e.stopPropagation()}>
+
+      <div className="cc-row" onClick={(e) => e.stopPropagation()}>
         <select
           className="cc-duration"
-          aria-label="Duration"
+          aria-label={`Duration of chord ${index + 1}`}
           value={slot.durationSteps}
-          onChange={(e) => s.setSlotDuration(slot.id, Number(e.target.value))}
+          onChange={(e) => setSlotDuration(slot.id, Number(e.target.value))}
         >
           {(DURATION_CHOICES.includes(slot.durationSteps)
             ? DURATION_CHOICES
@@ -105,71 +142,72 @@ function ChordCard({ slot, index, count }: { slot: ProgressionSlot; index: numbe
             <option key={d} value={d}>{durationLabel(d)}</option>
           ))}
         </select>
-      </div>
-      <div className="cc-actions" onClick={(e) => e.stopPropagation()}>
         <button
-          aria-label={slot.locked ? 'Unlock chord' : 'Lock chord'}
+          className={'cc-lock' + (slot.locked ? ' active' : '')}
+          aria-label={slot.locked ? `Unlock chord ${index + 1}` : `Lock chord ${index + 1}`}
           aria-pressed={slot.locked}
-          className={slot.locked ? 'active' : ''}
-          title={slot.locked ? 'Unlock' : 'Lock (survives variations)'}
-          onClick={() => s.toggleSlotLock(slot.id)}
+          title={slot.locked ? 'Locked — survives Variation' : 'Lock so Variation keeps this chord'}
+          onClick={() => toggleSlotLock(slot.id)}
         >
           {slot.locked ? '🔒' : '🔓'}
         </button>
-        <button aria-label="Audition chord" title="Audition" onClick={() => s.auditionSlot(slot.id)}>
+      </div>
+
+      <div className="cc-actions" onClick={(e) => e.stopPropagation()}>
+        <button aria-label={`Audition chord ${index + 1}`} title="Audition" onClick={() => auditionSlot(slot.id)}>
           ♪
         </button>
         <button
-          aria-label="Reroll this chord"
-          title="Reroll this chord"
-          disabled={slot.locked || s.generating}
-          onClick={() => void s.rerollSlot(slot.id)}
+          aria-label={`Reroll chord ${index + 1}`}
+          title="Reroll just this chord"
+          disabled={slot.locked || generating}
+          onClick={() => void rerollSlot(slot.id)}
         >
           ↻
         </button>
         <button
-          aria-label="Move left"
+          aria-label={`Move chord ${index + 1} left`}
           title="Move left"
           disabled={index === 0}
-          onClick={() => s.moveSlot(slot.id, -1)}
+          onClick={() => moveSlot(slot.id, -1)}
         >
           ◀
         </button>
         <button
-          aria-label="Move right"
+          aria-label={`Move chord ${index + 1} right`}
           title="Move right"
           disabled={index === count - 1}
-          onClick={() => s.moveSlot(slot.id, 1)}
+          onClick={() => moveSlot(slot.id, 1)}
         >
           ▶
         </button>
-        <button aria-label="Duplicate chord" title="Duplicate" onClick={() => s.duplicateSlot(slot.id)}>
+        <button aria-label={`Duplicate chord ${index + 1}`} title="Duplicate" onClick={() => duplicateSlot(slot.id)}>
           ⧉
         </button>
         <button
-          aria-label="Delete chord"
+          aria-label={`Delete chord ${index + 1}`}
           title="Delete"
           disabled={count <= 1}
-          onClick={() => s.deleteSlot(slot.id)}
+          onClick={() => deleteSlot(slot.id)}
         >
           ✕
         </button>
       </div>
-    </div>
+    </li>
   )
 }
 
 export function ChordTimeline() {
-  const progression = useStore((st) => st.progression)
-  const count = progression.slots.length
-  if (count === 0) {
-    return <div className="timeline-empty">No progression yet — press Generate.</div>
+  const slots = useStore((s) => s.progression.slots)
+  const generating = useStore((s) => s.generating)
+  if (slots.length === 0) {
+    return <p className="timeline-empty">No progression yet — press <b>Generate</b>.</p>
   }
   return (
-    <div className="chord-timeline" role="list" aria-label="Chord progression">
-      {progression.slots.map((slot, i) => (
-        <ChordCard key={slot.id} slot={slot} index={i} count={count} />
+    <ul className={'chord-timeline' + (generating ? ' busy' : '')} aria-busy={generating} aria-label="Chord progression">
+      {slots.map((slot, i) => (
+        <ChordCard key={slot.id} slot={slot} index={i} count={slots.length} />
       ))}
-    </div>
+    </ul>
   )
 }
