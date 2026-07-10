@@ -49,9 +49,28 @@ Tracked per milestone below.
 ### M1 — progression domain
 - Added `src/engine/progression/types.ts`, `operations.ts`, `history.ts`; `test/progression.test.ts`, `test/progressionHistory.test.ts`.
 
+### M2 — editable playback (`3f6ea68`)
+- Added `progressionPlayer.ts` (staged swaps at bar/cycle, hold-latch, mute, cycle/slotOnset events), `generator.ts` (serial chain walk, locked pass-through, isCancelled), `scheduler.ts` (epoch), `templates.ts` (extracted grid + tileOnsets). Removed `autoPlayer.ts`. Runtime owns the generation session; eager generation at load.
+
+### M3 — workspace UI (`898b351`)
+- App shell (mode tabs, Quick/Lab), ChordTimeline/ChordCard (full editing, accessible buttons), `theory/romanNumeral.ts`, displayMode, bounded undo/redo + shortcuts. Fixed store-before-runtime ordering so the synchronous progressionApplied echo is identity-recognized.
+
+### M4 — candidates() + lock-aware variation (`2dbf0a1`)
+- `MarkovEngine.candidates()` (exact sample() distribution, no RNG), `NeuralEngine.candidates()` (softmax peek, session untouched), registry bridge; generator one-step lookahead toward locked successors (argmax prior x transition, floored); "Variation queued" badge via 'staged' event.
+
+### M5-M6 — macros, presets, phrase timing (`4eb80fa`)
+- `engine/macros/mapping.ts` (four macros -> engine params; defaults pin the V1 sound; tension: gravity below midpoint / sevenths above), `presets.ts` (7 curated + bounded Surprise Me). Lab edits mark owning macro Custom. Step-exact phrase lengths (1/2 bar .. 16 bars + custom).
+
+### M7-M8 — Listen & Respond + explainability (`19fec83`, `24575df`)
+- `engine/respond/`: types, phraseCapture (snapshot/finalize, retriggers, held-note synthesis, pickup grace), melodyAnalysis (duration x metric x modest velocity), scoring (5 components, total = exact weighted sum), explanation (derived reasons only), responseEngine (state machine; early kickoff one bar pre-close from notes already heard; response starts on the closing boundary when generation resolved in time, one muted analyzing cycle as fallback; N-rep commitment; READY holds).
+- Runtime: StepTimeline ring buffer for capture timestamps (unswung grid), app-mode note router, buildResponse (scored slot-0 + walk + stage), `window.__autoharm` debug handle for the manual checklist.
+- UI: RespondView (phase badges, capture progress, repetitions), ExplanationPanel (function/reasons/score bars/blend profile).
+
 ## Deviations from the spec
 
-- (none yet)
+- Rhythm/phrase-length changes auto-regenerate ONLY a pristine progression (all slots generated + unlocked); with any lock/manual edit they defer to the next explicit Generate/Variation — preserves both V1 dial performability and user ownership (spec §36 stability rule).
+- Reroll transport button = Generate Variation semantics (locked preserved).
+- Respond: response length/rhythm follow the current phrase/rhythm settings; slot 0 is the scored "response chord", later slots are model-walked (spec §26 phrase-level depth).
 
 ## Known limitations
 
