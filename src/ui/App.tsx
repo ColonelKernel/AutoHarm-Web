@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useStore, SEED_LIST, KEY_ROOTS, MODES } from '../state/store'
-import type { AppMode, DisplayMode, ViewMode } from '../state/store'
+import type { AppMode, DisplayMode, MacroName, ViewMode } from '../state/store'
+import { PRESETS, SURPRISE_ID } from '../engine/macros/presets'
+import { STEPS_PER_BAR } from '../engine/player/templates'
 import { MODEL_LIST } from '../engine/voicing/performanceMap'
 import { SESSION_MODES, type ModelName, type SessionMode } from '../engine/markov/config'
 import { swingDelaySteps, swingLabel, SWING_UNITS, type SwingUnit } from '../engine/player/swing'
@@ -249,6 +251,53 @@ function ActionBar() {
   )
 }
 
+const PHRASE_CHOICES: Array<{ steps: number; label: string }> = [
+  { steps: STEPS_PER_BAR / 2, label: '1/2 bar' },
+  { steps: STEPS_PER_BAR, label: '1 bar' },
+  { steps: 2 * STEPS_PER_BAR, label: '2 bars' },
+  { steps: 4 * STEPS_PER_BAR, label: '4 bars' },
+  { steps: 8 * STEPS_PER_BAR, label: '8 bars' },
+  { steps: 16 * STEPS_PER_BAR, label: '16 bars' },
+]
+
+/** Phrase length in musical units, step-exact internally (4/4 only). */
+function PhraseLengthControl() {
+  const phraseSteps = useStore((s) => s.phraseSteps)
+  const setPhraseSteps = useStore((s) => s.setPhraseSteps)
+  const listed = PHRASE_CHOICES.some((c) => c.steps === phraseSteps)
+  return (
+    <>
+      <div className="control">
+        <label>Phrase length</label>
+        <select
+          value={listed ? phraseSteps : 'custom'}
+          onChange={(e) => {
+            if (e.target.value === 'custom') setPhraseSteps(3 * STEPS_PER_BAR) // non-listed -> shows the bars input
+            else setPhraseSteps(Number(e.target.value))
+          }}
+        >
+          {PHRASE_CHOICES.map((c) => (
+            <option key={c.steps} value={c.steps}>{c.label}</option>
+          ))}
+          <option value="custom">custom…</option>
+        </select>
+      </div>
+      {!listed && (
+        <div className="control">
+          <label>Custom (bars)</label>
+          <input
+            type="number"
+            min={0.5}
+            step={0.5}
+            value={phraseSteps / STEPS_PER_BAR}
+            onChange={(e) => setPhraseSteps(Number(e.target.value) * STEPS_PER_BAR)}
+          />
+        </div>
+      )}
+    </>
+  )
+}
+
 function TransportBar() {
   const s = useStore()
   return (
@@ -273,33 +322,99 @@ function TransportBar() {
           ))}
         </select>
       </div>
-      <div className="control">
-        <label>Phrase length</label>
-        <select value={s.phraseBars} onChange={(e) => s.setPhraseBars(Number(e.target.value))}>
-          {[8, 16, 24, 32].map((b) => (
-            <option key={b} value={b}>{b} bars</option>
-          ))}
-        </select>
-      </div>
+      <PhraseLengthControl />
       <Dial label="Rhythm" value={s.rhythm} onChange={s.setRhythm} display={s.rhythmName} />
       <Dial label="Swing" value={s.swing} onChange={s.setSwing} display={s.swingName} />
     </div>
   )
 }
 
+/** One of the four signature macros: endpoint hints + Custom state. */
+function MacroDial(props: { name: MacroName; label: string; left: string; right: string }) {
+  const value = useStore((s) => s.macros[props.name])
+  const custom = useStore((s) => s.customMacros[props.name] === true)
+  const setMacro = useStore((s) => s.setMacro)
+  return (
+    <div className="macro-dial">
+      <label>
+        <span>{props.label}</span>
+        <span className="value">{custom ? 'Custom' : value.toFixed(2)}</span>
+      </label>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.01}
+        value={value}
+        aria-label={`${props.label}: ${props.left} to ${props.right}`}
+        onChange={(e) => setMacro(props.name, Number(e.target.value))}
+      />
+      <div className="macro-ends" aria-hidden="true">
+        <span>{props.left}</span>
+        <span>{props.right}</span>
+      </div>
+    </div>
+  )
+}
+
+function PresetPicker() {
+  const active = useStore((s) => s.activePresetId)
+  const applyPreset = useStore((s) => s.applyPreset)
+  return (
+    <div className="preset-row" role="group" aria-label="Musical presets">
+      {PRESETS.map((p) => (
+        <button
+          key={p.id}
+          className={'preset-chip' + (active === p.id ? ' active' : '')}
+          title={p.description}
+          aria-pressed={active === p.id}
+          onClick={() => applyPreset(p.id)}
+        >
+          {p.name}
+        </button>
+      ))}
+      <button
+        className={'preset-chip surprise' + (active === SURPRISE_ID ? ' active' : '')}
+        title="A musically coherent twist on one of the families"
+        onClick={() => applyPreset(SURPRISE_ID)}
+      >
+        🎲 Surprise Me
+      </button>
+    </div>
+  )
+}
+
+function MacroPanel() {
+  const s = useStore()
+  return (
+    <>
+      <PresetPicker />
+      <div className="macro-row">
+        <MacroDial name="familiarity" label="Familiarity" left="Common" right="Unusual" />
+        <MacroDial name="harmonicColor" label="Harmonic Color" left="Folk" right="Jazz" />
+        <MacroDial name="tension" label="Tension" left="Resolved" right="Suspended" />
+        <MacroDial name="motion" label="Motion" left="Still" right="Active" />
+      </div>
+      <div className="row" style={{ marginTop: 12 }}>
+        <div className="control">
+          <label>Seed chord</label>
+          <select value={s.seedIndex} onChange={(e) => s.setSeedIndex(Number(e.target.value))}>
+            {SEED_LIST.map((c, i) => (
+              <option key={c} value={i}>{c}</option>
+            ))}
+          </select>
+        </div>
+        <button onClick={s.audition}>Audition seed</button>
+      </div>
+    </>
+  )
+}
+
+/** Raw engine dials (Lab) — hand edits here show macros as "Custom". */
 function GeneratorDials() {
   const s = useStore()
   return (
     <div className="row">
-      <div className="control">
-        <label>Seed chord</label>
-        <select value={s.seedIndex} onChange={(e) => s.setSeedIndex(Number(e.target.value))}>
-          {SEED_LIST.map((c, i) => (
-            <option key={c} value={i}>{c}</option>
-          ))}
-        </select>
-      </div>
-      <button onClick={s.audition}>Audition seed</button>
       <Dial label="Color (folk→jazz)" value={s.color} onChange={s.setColor} />
       <Dial label="Adventure" value={s.adventure} onChange={s.setAdventure} />
       <Dial label="Spice (macro)" value={s.spice} onChange={s.setSpice} />
@@ -507,9 +622,20 @@ function GenerateView() {
       </section>
       <section className="panel">
         <h2>Direction</h2>
-        <p className="panel-sub">Chooses <em>which</em> chord comes next — seed, key (in the header), and the dials.</p>
-        <GeneratorDials />
+        <p className="panel-sub">
+          Pick a preset or shape it yourself — these four dials are the musical personality.
+        </p>
+        <MacroPanel />
       </section>
+      {viewMode === 'lab' && (
+        <section className="panel">
+          <h2>Raw generator dials</h2>
+          <p className="panel-sub">
+            The parameters underneath the macros. Editing here shows the owning macro as <em>Custom</em>.
+          </p>
+          <GeneratorDials />
+        </section>
+      )}
       {viewMode === 'lab' && <LabPanels />}
       <OutputPanel />
       <ConnectionsPanel />

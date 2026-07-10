@@ -23,10 +23,17 @@ import {
   toggleLock as opToggleLock,
 } from '../engine/progression/operations'
 import { ProgressionHistory } from '../engine/progression/history'
+import {
+  DEFAULT_MACROS,
+  mapMacrosToEngineParameters,
+  type MacroState,
+} from '../engine/macros/mapping'
+import { presetById, surpriseMe, SURPRISE_ID, type MusicalPreset } from '../engine/macros/presets'
 
 export type AppMode = 'generate' | 'respond' | 'perform'
 export type ViewMode = 'quick' | 'lab'
 export type DisplayMode = 'symbols' | 'roman' | 'both'
+export type MacroName = keyof MacroState
 import { MidiIO, type MidiPortInfo } from '../io/midi'
 import { downloadBytes } from '../io/download'
 import type { ModelName, SessionMode } from '../engine/markov/config'
@@ -61,6 +68,14 @@ interface AppState {
   canUndo: boolean
   canRedo: boolean
   variationQueued: boolean
+
+  // V2 macros + presets
+  macros: MacroState
+  /** Macros whose underlying parameters were hand-edited in Lab ("Custom"). */
+  customMacros: Partial<Record<MacroName, boolean>>
+  activePresetId: string | null
+  phraseSteps: number
+  repetitions: number // respond-mode response commitment
 
   // generator dials
   color: number
@@ -128,6 +143,10 @@ interface AppState {
   auditionSlot(id: string): void
   undo(): void
   redo(): void
+  setMacro(name: MacroName, value: number): void
+  applyPreset(id: string): void
+  setPhraseSteps(steps: number): void
+  setRepetitions(n: number): void
   panic(): void
   audition(): void
   exportMidi(): void
@@ -210,6 +229,12 @@ export const useStore = create<AppState>((set, get) => ({
   canUndo: false,
   canRedo: false,
   variationQueued: false,
+
+  macros: { ...DEFAULT_MACROS },
+  customMacros: {},
+  activePresetId: null,
+  phraseSteps: 8 * STEPS_PER_BAR,
+  repetitions: 2,
 
   color: 0.5,
   adventure: 0.35,
@@ -442,6 +467,76 @@ export const useStore = create<AppState>((set, get) => ({
     getRuntime().applyEdit(next, true)
   },
 
+  /** One macro moved: remap ONLY the parameters that macro owns, so Lab
+   * overrides on other macros survive. Moving a macro clears its own
+   * Custom flag and detaches from the active preset. */
+  setMacro(name, value) {
+    const macros = { ...get().macros, [name]: Math.max(0, Math.min(1, value)) }
+    const patch = mapMacrosToEngineParameters(macros)
+    const rt = getRuntime()
+    const customMacros = { ...get().customMacros }
+    delete customMacros[name]
+    const updates: Partial<AppState> = { macros, customMacros, activePresetId: null }
+    switch (name) {
+      case 'familiarity':
+        rt.markov.setAdventure(patch.adventure)
+        rt.registry.setNeuralTemperature(patch.neuralTemperature)
+        updates.adventure = patch.adventure
+        updates.neuralTemp = patch.neuralTemperature
+        break
+      case 'harmonicColor':
+        rt.markov.setColor(patch.color)
+        updates.color = patch.color
+        break
+      case 'tension':
+        rt.markov.setGravity(patch.gravity)
+        rt.sonifier.setColor7th(patch.color7th)
+        updates.gravity = patch.gravity
+        updates.color7th = patch.color7th
+        break
+      case 'motion': {
+        const id = rhythmToTemplate(patch.rhythmDensity)
+        const t = TEMPLATES[id]
+        rt.setTemplate(id)
+        updates.rhythm = patch.rhythmDensity
+        updates.rhythmName = t.name
+        updates.rhythmOnsets = t.onsets
+        updates.rhythmSteps = t.spanBars * STEPS_PER_BAR
+        break
+      }
+    }
+    set(updates)
+  },
+
+  applyPreset(id) {
+    const preset: MusicalPreset | null = id === SURPRISE_ID ? surpriseMe(Math.random) : presetById(id)
+    if (!preset) return
+    const s = get()
+    s.setMacro('familiarity', preset.macros.familiarity)
+    s.setMacro('harmonicColor', preset.macros.harmonicColor)
+    s.setMacro('tension', preset.macros.tension)
+    s.setMacro('motion', preset.macros.motion)
+    const o = preset.overrides
+    if (o) {
+      if (o.voicingLevel !== undefined) s.setVoicingLevel(o.voicingLevel)
+      if (o.voiceDistance !== undefined) s.setVoiceDistance(o.voiceDistance)
+      if (o.register !== undefined) s.setRegister(o.register)
+      if (o.swing !== undefined) s.setSwing(o.swing)
+      if (o.swingUnit !== undefined) s.setSwingUnit(o.swingUnit)
+      if (o.keyMode !== undefined) s.setKeyMode(o.keyMode)
+    }
+    set({ activePresetId: id, customMacros: {} })
+  },
+
+  setPhraseSteps(steps) {
+    const v = Math.max(STEPS_PER_BAR / 2, Math.round(steps))
+    getRuntime().setPhraseSteps(v)
+    set({ phraseSteps: v, phraseBars: v / STEPS_PER_BAR })
+  },
+  setRepetitions(n) {
+    set({ repetitions: Math.max(1, Math.min(16, Math.round(n))) })
+  },
+
   reroll() {
     // Variation semantics: locked slots survive; queued to the boundary
     // while playing, immediate when stopped.
@@ -488,19 +583,25 @@ export const useStore = create<AppState>((set, get) => ({
 
   setColor(v) {
     getRuntime().markov.setColor(v)
-    set({ color: v })
+    set({ color: v, customMacros: { ...get().customMacros, harmonicColor: true }, activePresetId: null })
   },
   setAdventure(v) {
     getRuntime().markov.setAdventure(v)
-    set({ adventure: v })
+    set({ adventure: v, customMacros: { ...get().customMacros, familiarity: true }, activePresetId: null })
   },
   setSpice(v) {
     getRuntime().markov.setSpice(v)
-    set({ spice: v, color: v, adventure: v })
+    set({
+      spice: v,
+      color: v,
+      adventure: v,
+      customMacros: { ...get().customMacros, familiarity: true, harmonicColor: true },
+      activePresetId: null,
+    })
   },
   setGravity(v) {
     getRuntime().markov.setGravity(v)
-    set({ gravity: v })
+    set({ gravity: v, customMacros: { ...get().customMacros, tension: true }, activePresetId: null })
   },
 
   async setModel(m) {
@@ -524,7 +625,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setNeuralTemp(v) {
     getRuntime().registry.setNeuralTemperature(v)
-    set({ neuralTemp: v })
+    set({ neuralTemp: v, customMacros: { ...get().customMacros, familiarity: true }, activePresetId: null })
   },
 
   setSeedIndex(i) {
@@ -550,13 +651,19 @@ export const useStore = create<AppState>((set, get) => ({
     set({ hold: on })
   },
   setPhraseBars(bars) {
-    getRuntime().setPhraseSteps(bars * STEPS_PER_BAR)
-    set({ phraseBars: bars })
+    get().setPhraseSteps(bars * STEPS_PER_BAR)
   },
   setRhythm(v) {
     const t = TEMPLATES[rhythmToTemplate(v)]
     getRuntime().setTemplate(rhythmToTemplate(v))
-    set({ rhythm: v, rhythmName: t.name, rhythmOnsets: t.onsets, rhythmSteps: t.spanBars * STEPS_PER_BAR })
+    set({
+      rhythm: v,
+      rhythmName: t.name,
+      rhythmOnsets: t.onsets,
+      rhythmSteps: t.spanBars * STEPS_PER_BAR,
+      customMacros: { ...get().customMacros, motion: true },
+      activePresetId: null,
+    })
   },
   setSwing(v) {
     getRuntime().setSwing(v)
@@ -585,7 +692,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setColor7th(v) {
     getRuntime().sonifier.setColor7th(v)
-    set({ color7th: v })
+    set({ color7th: v, customMacros: { ...get().customMacros, tension: true }, activePresetId: null })
   },
   setRegister(v) {
     getRuntime().sonifier.setRegister(v)
