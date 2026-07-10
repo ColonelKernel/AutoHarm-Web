@@ -84,6 +84,11 @@ Tracked per milestone below.
 - Early kick moved from one BAR to one BEAT before the window close (min half-phrase): the harmonization hears ~28/32 steps of a 2-bar phrase instead of 16/32; the muted analyzing-cycle fallback still covers slow generation.
 - Browser-verified: C/E/G arpeggio in bar 1 + D/F/A in bar 2 → A:min ("Supports C, E"), E:min ("Supports G, E"), F:maj ("Supports F"), D:min ("Supports A") — last-bar melody reaching the response is the beat-early kick at work.
 
+### V2.2 — scored generation everywhere + generated harmonic rhythm
+- ONE walk for everything: `harmonizePhrase` gained locked pass-through (identity + chain steering), locked-next lookahead (transition folded into the model prior, reason recorded), a pick strategy (`argmax` for Respond, seeded score^5 sampling for Generate/Variation/Reroll-one variety), and a `source` label. `generateProgression` retired; generator.ts keeps only the sampler contracts + chainTail. Every generated card now carries a breakdown + reasons (melody row hidden in the UI for non-response chords — it's neutral without a phrase).
+- `engine/rhythm/harmonicRhythm.ts`: harmonic rhythm is GENERATED, not tiled — per-bar patterns drawn from the template vocabulary around the selected feel (drift weights ±2 notches), 55% repeat bias for groove coherence, final bar draws one notch sparser (cadential broadening). Fresh rhythm per Generate/response; a VARIATION keeps the take's onset skeleton so locked slots keep index and timing; a custom-edited grid still tiles verbatim.
+- Browser-verified: three fresh 8-bar generations vary in rhythm (all exactly 128 steps; one ends half-half…whole — the broadened final bar), variation preserved the rhythm skeleton + locked chords while changing harmony, and an unlocked card explained itself with "Chosen to lead into the locked G:maj".
+
 ## Known limitations
 
 - 4/4 meter only; phrase lengths are multiples of half a bar (8 steps) plus custom fractional bars.

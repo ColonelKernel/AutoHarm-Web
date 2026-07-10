@@ -23,12 +23,19 @@ import {
   type ChordExplanation,
   type Progression,
   type ProgressionSlot,
+  type SlotSource,
 } from '../progression/types'
 import type { CandidateLike, ChordSampler } from '../progression/generator'
 import type { CapturedNote } from './types'
+import { weightedChoice, type Rng } from '../random'
 
 /** Candidates considered per slot (one model forward per slot for neural). */
 export const SLOT_CANDIDATES = 12
+/** Unseen transitions into a locked neighbor are rare, not impossible. */
+const LOOKAHEAD_FLOOR = 1e-4
+/** Scored-sampling contrast: weight = total^SHARPNESS. High enough that a
+ * clearly better chord usually wins, low enough that variations vary. */
+export const SAMPLE_SHARPNESS = 5
 
 /**
  * Split finalized (phrase-relative) notes into per-slot segments, clipping
@@ -53,8 +60,12 @@ export function segmentPhrase(
   })
 }
 
+export type PickStrategy =
+  | { mode: 'argmax' } // respond: the single best answer, deterministic
+  | { mode: 'sample'; rng: Rng; sharpness?: number } // generate: scored variety
+
 export interface HarmonizeOptions {
-  /** Finalized capture, phrase-relative steps. */
+  /** Finalized capture, phrase-relative steps ([] = no melody: generation). */
   notes: CapturedNote[]
   /** Slot onsets across the phrase, ascending, starting at 0. */
   onsets: number[]
@@ -65,6 +76,13 @@ export interface HarmonizeOptions {
   tension: number
   /** Recently sounded symbols (novelty context); the walk appends its picks. */
   recent: string[]
+  /** Variation source: locked slots (matched by order) pass through
+   * untouched, steer the chain, and pull their predecessors toward them. */
+  prior?: Progression
+  /** How the scored candidate is chosen. Default: argmax. */
+  pick?: PickStrategy
+  /** Slot provenance label. Default: 'response'. */
+  source?: SlotSource
   voicingOptions?: VoicingOptions
   blendProfile?: Array<[string, number]>
   isCancelled?: () => boolean
@@ -111,11 +129,24 @@ export async function harmonizePhrase(
   let chain = opts.seed
   let prevVoicing = voicing(opts.seed, opts.voicingOptions, null)
 
+  const source = opts.source ?? 'response'
   for (let i = 0; i < onsets.length; i++) {
     if (opts.isCancelled?.()) return null
     const duration = (i + 1 < onsets.length ? onsets[i + 1] : total) - onsets[i]
     if (duration <= 0) continue
+
+    // Locked slots (variation) pass through untouched and steer the walk.
+    const lockedSlot = opts.prior?.slots[i]?.locked ? opts.prior.slots[i] : null
+    if (lockedSlot) {
+      slots.push({ ...lockedSlot, durationSteps: duration })
+      prevVoicing = voicing(lockedSlot.symbol, opts.voicingOptions, prevVoicing) ?? prevVoicing
+      recent.push(lockedSlot.symbol)
+      chain = lockedSlot.symbol
+      continue
+    }
+
     const analysis = analyzeMelody(segments[i], total)
+    const nextLocked = opts.prior?.slots[i + 1]?.locked ? opts.prior.slots[i + 1].symbol : null
 
     let symbol = chain
     let explanation: ChordExplanation | undefined
@@ -128,9 +159,21 @@ export async function harmonizePhrase(
     if (opts.isCancelled?.()) return null
 
     if (cands.length > 0) {
-      const maxPrior = Math.max(...cands.map((c) => c.prior))
-      let bestTotal = -1
-      for (const c of cands) {
+      // Approaching a locked chord: fold the transition INTO it into each
+      // candidate's model prior (one-step lookahead) so the pick both fits
+      // here and leads convincingly onward.
+      let effective = cands.map((c) => ({ ...c }))
+      if (nextLocked && sampler.candidates) {
+        effective = []
+        for (const c of cands) {
+          const nexts = await Promise.resolve(sampler.candidates(c.symbol, 24))
+          if (opts.isCancelled?.()) return null
+          const into = nexts.find((n) => n.symbol === nextLocked)?.prior ?? LOOKAHEAD_FLOOR
+          effective.push({ symbol: c.symbol, prior: c.prior * into })
+        }
+      }
+      const maxPrior = Math.max(...effective.map((c) => c.prior))
+      const scored = effective.map((c) => {
         const candidateNotes = voicing(c.symbol, opts.voicingOptions, prevVoicing)
         const breakdown = scoreChord(c.symbol, {
           analysis,
@@ -141,16 +184,26 @@ export async function harmonizePhrase(
           prevVoicing,
           recent,
         })
-        if (breakdown.total > bestTotal) {
-          bestTotal = breakdown.total
-          symbol = c.symbol
-          explanation = {
-            reasons: explainResponseChord(c.symbol, opts.key, breakdown, analysis),
-            breakdown,
-            prior: c.prior,
-            ...(opts.blendProfile ? { blendProfile: opts.blendProfile } : {}),
-          }
-        }
+        return { symbol: c.symbol, prior: c.prior, breakdown }
+      })
+
+      let picked = scored[0]
+      for (const s of scored) if (s.breakdown.total > picked.breakdown.total) picked = s
+      if (opts.pick?.mode === 'sample' && scored.length > 1 && picked.breakdown.total > 0) {
+        const sharpness = opts.pick.sharpness ?? SAMPLE_SHARPNESS
+        const weights: Array<[string, number]> = scored.map((s) => [s.symbol, Math.pow(s.breakdown.total, sharpness)])
+        const chosen = weightedChoice(opts.pick.rng, weights)
+        picked = scored.find((s) => s.symbol === chosen) ?? picked
+      }
+
+      symbol = picked.symbol
+      const reasons = explainResponseChord(picked.symbol, opts.key, picked.breakdown, analysis)
+      if (nextLocked) reasons.unshift(`Chosen to lead into the locked ${nextLocked}`)
+      explanation = {
+        reasons,
+        breakdown: picked.breakdown,
+        prior: picked.prior,
+        ...(opts.blendProfile ? { blendProfile: opts.blendProfile } : {}),
       }
     } else {
       try {
@@ -165,7 +218,7 @@ export async function harmonizePhrase(
     }
     if (opts.isCancelled?.()) return null
 
-    slots.push(makeSlot(symbol, duration, 'response', { explanation }))
+    slots.push(makeSlot(symbol, duration, source, { explanation }))
     prevVoicing = voicing(symbol, opts.voicingOptions, prevVoicing) ?? prevVoicing
     recent.push(symbol)
     chain = symbol

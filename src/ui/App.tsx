@@ -95,6 +95,10 @@ function RhythmEditor() {
   const s = useStore()
   return (
     <div>
+      <p className="panel-sub">
+        Harmonic rhythm is <em>generated</em> around this feel — bars mostly groove together, the
+        final bar broadens. Click cells to fix an exact pattern (generation then uses it verbatim).
+      </p>
       <div className="row" style={{ marginBottom: 6, alignItems: 'center' }}>
         <span className="readout" style={{ minWidth: 110 }}>
           {s.rhythmName}{s.rhythmName === 'custom' ? ' pattern' : ''}
@@ -701,7 +705,9 @@ function ExplanationPanel() {
       {b && (
         <div className="explain-scores">
           {([
-            ['Melody fit', b.melodyFit],
+            // Melody fit only means something for chords chosen against a
+            // played phrase; generated chords score it neutrally.
+            ...(slot.source === 'response' ? ([['Melody fit', b.melodyFit]] as const) : []),
             ['Model preference', b.modelPrior],
             ['Voice leading', b.voiceLeadingFit],
             ['Cadence fit', b.cadenceFit],

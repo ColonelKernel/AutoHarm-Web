@@ -12,7 +12,7 @@ import { join } from 'node:path'
 
 import { MarkovEngine } from '../src/engine/markov/markovEngine'
 import { loadCorpora, type RawCorpora } from '../src/engine/markov/corpusLoader'
-import { generateProgression } from '../src/engine/progression/generator'
+import { harmonizePhrase } from '../src/engine/respond/harmonizer'
 import { makeProgression, makeSlot } from '../src/engine/progression/types'
 
 const rawCorpora: RawCorpora = JSON.parse(
@@ -70,7 +70,7 @@ describe('MarkovEngine.candidates', () => {
   })
 })
 
-describe('generator lookahead toward locked successors', () => {
+describe('harmonizer lookahead toward locked successors', () => {
   /** Sampler where candidates are rigged: from START, options A (p .6) and
    * B (p .4); A never reaches LOCKED (floor), B always does (p .9). */
   const rigged = {
@@ -91,7 +91,7 @@ describe('generator lookahead toward locked successors', () => {
       makeSlot('old', 8, 'generated'),
       makeSlot('LOCKED', 8, 'manual', { locked: true }),
     ])
-    const p = await generateProgression(rigged, { seed: 'START', onsets: [0, 8], totalSteps: 16, prior })
+    const p = await harmonizePhrase(rigged, { notes: [], seed: 'START', onsets: [0, 8], totalSteps: 16, prior, key: 'C:maj', tension: 0.5, recent: [], source: 'generated' })
     // Plain sampling would pick A (or 'A' from sample()); lookahead must pick
     // B because 0.4*0.9 > 0.6*1e-4.
     expect(p!.slots[0].symbol).toBe('B')
@@ -105,7 +105,7 @@ describe('generator lookahead toward locked successors', () => {
       makeSlot('old', 8, 'generated'),
       makeSlot('LOCKED', 8, 'manual', { locked: true }),
     ])
-    const p = await generateProgression(plain, { seed: 'START', onsets: [0, 8], totalSteps: 16, prior })
+    const p = await harmonizePhrase(plain, { notes: [], seed: 'START', onsets: [0, 8], totalSteps: 16, prior, key: 'C:maj', tension: 0.5, recent: [], source: 'generated' })
     expect(p!.slots[0].symbol).toBe('A')
   })
 })

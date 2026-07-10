@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest'
 import { harmonizePhrase, segmentPhrase } from '../src/engine/respond/harmonizer'
 import type { CapturedNote } from '../src/engine/respond/types'
+import { makeProgression, makeSlot } from '../src/engine/progression/types'
+import { mulberry32 } from '../src/engine/random'
 
 const note = (n: number, on: number, off: number, vel = 90): CapturedNote => ({
   note: n, velocity: vel, onStep: on, onMs: 0, offStep: off, offMs: 0,
@@ -163,5 +165,79 @@ describe('harmonizePhrase', () => {
     // (voice leading decides), the repetition penalty must flip slot 2.
     expect(['C:maj', 'A:min']).toContain(p!.slots[0].symbol)
     expect(p!.slots[1].symbol).not.toBe(p!.slots[0].symbol)
+  })
+})
+
+describe('generation via harmonizePhrase (empty melody)', () => {
+  const chainSampler = {
+    sample: (c: string) => ({ output: ({ 'C:maj': 'G:7', 'G:7': 'A:min' } as Record<string, string>)[c] ?? 'C:maj', probability: 0.5 }),
+    candidates: (c: string) => {
+      const table: Record<string, Array<{ symbol: string; prior: number }>> = {
+        'C:maj': [{ symbol: 'G:7', prior: 0.6 }, { symbol: 'F:maj', prior: 0.4 }],
+        'G:7': [{ symbol: 'C:maj', prior: 0.8 }, { symbol: 'A:min', prior: 0.2 }],
+        'E:min7': [{ symbol: 'A:min', prior: 0.7 }, { symbol: 'F:maj', prior: 0.3 }],
+        'F:maj': [{ symbol: 'C:maj', prior: 0.5 }, { symbol: 'G:7', prior: 0.5 }],
+        'A:min': [{ symbol: 'F:maj', prior: 0.6 }, { symbol: 'D:min', prior: 0.4 }],
+      }
+      return table[c] ?? []
+    },
+  }
+  const { makeProgression: mp, makeSlot: ms } = { makeProgression, makeSlot }
+
+  it('locked slots pass through by order, keep identity, and steer the chain', async () => {
+    const seen: string[] = []
+    const tracking = { ...chainSampler, candidates: (c: string) => { seen.push(c); return chainSampler.candidates(c) } }
+    const prior = mp([
+      ms('C:maj', 8, 'generated'),
+      ms('E:min7', 8, 'manual', { locked: true }),
+      ms('G:7', 8, 'generated'),
+      ms('C:maj', 8, 'generated', { locked: true }),
+    ])
+    const p = await harmonizePhrase(tracking, {
+      notes: [], onsets: [0, 8, 16, 24], totalSteps: 32,
+      seed: 'C:maj', key: 'C:maj', tension: 0.5, recent: [], prior, source: 'generated',
+    })
+    expect(p!.slots[1].symbol).toBe('E:min7')
+    expect(p!.slots[1].locked).toBe(true)
+    expect(p!.slots[1].id).toBe(prior.slots[1].id) // identity preserved
+    expect(p!.slots[3].symbol).toBe('C:maj')
+    // Slot 3's chain context was the locked E:min7, not slot 1's pick.
+    expect(seen).toContain('E:min7')
+  })
+
+  it('generated slots are labeled and carry breakdowns (no melody = neutral fit)', async () => {
+    const p = await harmonizePhrase(chainSampler, {
+      notes: [], onsets: [0, 8], totalSteps: 16,
+      seed: 'C:maj', key: 'C:maj', tension: 0.5, recent: [], source: 'generated',
+    })
+    for (const s of p!.slots) {
+      expect(s.source).toBe('generated')
+      expect(s.explanation?.breakdown?.melodyFit).toBe(0.5)
+      expect(s.explanation?.breakdown?.total).toBeGreaterThan(0)
+    }
+  })
+
+  it('scored sampling: deterministic under a seed, varied across seeds', async () => {
+    const walk = (seed: number) =>
+      harmonizePhrase(chainSampler, {
+        notes: [], onsets: [0, 4, 8, 12], totalSteps: 16,
+        seed: 'C:maj', key: 'C:maj', tension: 0.5, recent: [], source: 'generated',
+        pick: { mode: 'sample', rng: mulberry32(seed) },
+      }).then((p) => p!.slots.map((s) => s.symbol).join(' '))
+    expect(await walk(3)).toBe(await walk(3))
+    const outcomes = new Set(await Promise.all([1, 2, 3, 4, 5, 6, 7, 8].map(walk)))
+    expect(outcomes.size).toBeGreaterThan(1) // variety across generations
+  })
+
+  it('degrades by keeping the chain chord when the sampler fails everywhere', async () => {
+    const broken = {
+      sample: () => { throw new Error('detonated') },
+      candidates: () => { throw new Error('detonated') },
+    }
+    const p = await harmonizePhrase(broken, {
+      notes: [], onsets: [0, 8], totalSteps: 16,
+      seed: 'D:min', key: 'C:maj', tension: 0.5, recent: [], source: 'generated',
+    })
+    expect(p!.slots.map((s) => s.symbol)).toEqual(['D:min', 'D:min'])
   })
 })

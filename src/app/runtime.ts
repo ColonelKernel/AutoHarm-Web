@@ -26,8 +26,9 @@ import {
   tileOnsets,
   type RhythmPattern,
 } from '../engine/player/templates'
-import { generateProgression, chainTail } from '../engine/progression/generator'
+import { chainTail } from '../engine/progression/generator'
 import { GenerationScheduler } from '../engine/progression/scheduler'
+import { generateHarmonicRhythm } from '../engine/rhythm/harmonicRhythm'
 import type { Progression } from '../engine/progression/types'
 import { RespondEngine } from '../engine/respond/responseEngine'
 import { harmonizePhrase } from '../engine/respond/harmonizer'
@@ -62,6 +63,8 @@ export class Runtime {
 
   // --- generation session ---
   private scheduler = new GenerationScheduler()
+  /** Seeded RNG for harmonic-rhythm draws + scored candidate sampling. */
+  private genRng = mulberry32(randomSeed())
   seed = 'C:maj' // chord the chain (re)starts from = latest chord handled
   templateId = DEFAULT_TEMPLATE_ID
   /** Custom rhythm pattern (editor) overriding the template when set. */
@@ -177,10 +180,26 @@ export class Runtime {
 
   /* --- generation session ----------------------------------------------------- */
 
-  /** Onsets across the current phrase from the custom pattern or template. */
+  /** Onsets for a NEW phrase. A custom-edited grid is explicit intent and
+   * tiles verbatim; otherwise the harmonic rhythm is GENERATED — per-bar
+   * patterns drawn around the selected feel, with groove coherence and a
+   * broadened final bar — fresh on every generation. */
   private phraseOnsets(): number[] {
-    const pattern = this.customPattern ?? TEMPLATES[this.templateId] ?? TEMPLATES[DEFAULT_TEMPLATE_ID]
-    return tileOnsets(pattern, this.phraseSteps)
+    if (this.customPattern) return tileOnsets(this.customPattern, this.phraseSteps)
+    const id = TEMPLATES[this.templateId] ? this.templateId : DEFAULT_TEMPLATE_ID
+    return generateHarmonicRhythm(this.genRng, { templateId: id, totalSteps: this.phraseSteps })
+  }
+
+  /** The onset skeleton of an existing progression (variation keeps it, so
+   * locked slots keep both their index and their timing). */
+  private onsetsOf(p: Progression): number[] {
+    const onsets: number[] = []
+    let step = 0
+    for (const s of p.slots) {
+      onsets.push(step)
+      step += s.durationSteps
+    }
+    return onsets
   }
 
   /** Blend profile in effect (markov only) — stamped into explanations. */
@@ -212,19 +231,22 @@ export class Runtime {
       slots: cur.slots.map((s, i) => ({ ...s, locked: i !== idx })),
       totalSteps: cur.totalSteps,
     }
-    const explain = { blendProfile: this.blendProfile() }
-    const onsets: number[] = []
-    let step = 0
-    for (const s of cur.slots) {
-      onsets.push(step)
-      step += s.durationSteps
-    }
     const p = await this.scheduler.run((isCancelled) =>
-      generateProgression(
-        this.registry,
-        { seed: chainTail(cur, this.seed), onsets, totalSteps: cur.totalSteps, prior: masked, explain, isCancelled },
-        this.emitter,
-      ),
+      harmonizePhrase(this.registry, {
+        notes: [],
+        onsets: this.onsetsOf(cur),
+        totalSteps: cur.totalSteps,
+        seed: chainTail(cur, this.seed),
+        key: this.player.currentKey(),
+        tension: this.tension,
+        recent: [],
+        prior: masked,
+        pick: { mode: 'sample', rng: this.genRng },
+        source: 'generated',
+        voicingOptions: this.sonifier.options,
+        blendProfile: this.blendProfile(),
+        isCancelled,
+      }),
     )
     if (!p) return null
     const locks = new Map(cur.slots.map((s) => [s.id, s.locked]))
@@ -238,13 +260,26 @@ export class Runtime {
 
   private async runGeneration(prior: Progression | undefined, seed: string): Promise<Progression | null> {
     if (!this.loaded) return null
-    const explain = { blendProfile: this.blendProfile() }
+    // A variation keeps the take's rhythm (locks keep index + timing);
+    // a fresh generation draws a fresh harmonic rhythm.
+    const onsets =
+      prior && prior.totalSteps === this.phraseSteps ? this.onsetsOf(prior) : this.phraseOnsets()
     const p = await this.scheduler.run((isCancelled) =>
-      generateProgression(
-        this.registry,
-        { seed, onsets: this.phraseOnsets(), totalSteps: this.phraseSteps, prior, explain, isCancelled },
-        this.emitter,
-      ),
+      harmonizePhrase(this.registry, {
+        notes: [], // no melody: scoring runs on prior/voice-leading/cadence/novelty
+        onsets,
+        totalSteps: this.phraseSteps,
+        seed,
+        key: this.player.currentKey(),
+        tension: this.tension,
+        recent: [],
+        prior,
+        pick: { mode: 'sample', rng: this.genRng },
+        source: 'generated',
+        voicingOptions: this.sonifier.options,
+        blendProfile: this.blendProfile(),
+        isCancelled,
+      }),
     )
     if (p) {
       this.player.setProgression(p, this.player.state.active ? 'cycle' : 'now')
