@@ -44,6 +44,9 @@ MIDI setup and an end-to-end test.
   16th-note grid (whole/half, dotted, quarters, charleston, offbeats, son
   clave, gallop, eighths, sixteenths — sparse→dense on one dial, shown as a
   step grid) with loop / regen / one-shot phrase modes, hold (vamp), and reroll.
+  A **Swing** control slides the off-beats late (8th-note jazz or 16th-note funk
+  feel, straight → triplet → hard shuffle); the groove reaches the synth, the
+  live MIDI, and the exported `.mid` alike, and the step grid shows it visually.
 - **Transport** — an internal Web Worker lookahead clock, or **external MIDI
   clock** to slave to the DAW's tempo/transport (Clock → External; follows
   0xFA/0xFB/0xFC + 24 PPQN and shows the detected BPM).
@@ -58,7 +61,7 @@ MIDI setup and an end-to-end test.
 ```bash
 npm install          # also copies the ORT wasm into public/ort/
 npm run dev          # http://localhost:5173  (Markov path)
-npm test             # 51 tests (golden-fixture parity + regression + ONNX parity)
+npm test             # 84 tests (golden-fixture parity + regression + ONNX parity)
 npm run build        # static site -> dist/
 npm run preview      # serve the build (required to exercise the neural models —
                      # Vite dev intercepts the ORT wasm's dynamic import)

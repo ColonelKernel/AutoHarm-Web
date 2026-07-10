@@ -132,10 +132,12 @@ export class MidiIO {
     if (this.pulseTimes.length > PPQN + 1) this.pulseTimes.shift()
 
     // Fire the step BEFORE incrementing so pulse 0 == step 0 (aligned to Start).
+    // Tempo is published first: the step handler needs an up-to-date BPM to size
+    // its swing delay, which is a fraction of a step.
     if (this.clockPulses % PULSES_PER_STEP === 0) {
-      this.onClockStep?.()
       const bpm = this.estimateBpm()
       if (bpm !== null) this.onClockTempo?.(bpm)
+      this.onClockStep?.()
     }
     this.clockPulses += 1
   }

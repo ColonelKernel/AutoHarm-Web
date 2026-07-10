@@ -10,6 +10,7 @@ import { MarkovEngine } from '../engine/markov/markovEngine'
 import { loadCorpora, type RawCorpora } from '../engine/markov/corpusLoader'
 import { Sonifier } from '../engine/player/sonifier'
 import { AutoPlayer, STEPS_PER_BEAT } from '../engine/player/autoPlayer'
+import { swingDelaySteps, DEFAULT_SWING_UNIT, type SwingUnit } from '../engine/player/swing'
 import { ModelRegistry } from '../engine/registry'
 import { mulberry32, randomSeed } from '../engine/random'
 import { LookaheadClock } from '../io/clock'
@@ -35,8 +36,13 @@ export class Runtime {
   clockSource: 'internal' | 'external' = 'internal'
   private externalBpm: number | null = null
 
+  // --- groove ---
+  swing = 0 // 0 = straight .. 1 = hard shuffle (75:25)
+  swingUnit: SwingUnit = DEFAULT_SWING_UNIT
+
   // --- MIDI recording (for .mid export) ---
   private currentStep = -1 // monotonic 16th-step counter within the current take
+  private currentStepSwing = 0 // this step's swing delay, in steps
   private recordBase = 0 // step offset so a cleared/rebased take starts at 0
   private recorded: ChordEvent[] = [] // voiced chords captured while playing
   /** Called when the recording gains its first chord (UI enables Export). */
@@ -101,11 +107,10 @@ export class Runtime {
     }
     this.midi.onClockStep = () => {
       if (this.clockSource !== 'external' || !this.player.player.active) return
-      this.currentStep += 1
       // Reactive clock: schedule the chord a hair ahead of now so Web Audio /
-      // Web MIDI don't get a start-in-the-past.
-      const at = this.ctx ? this.ctx.currentTime + 0.005 : undefined
-      this.player.onStep(at)
+      // Web MIDI don't get a start-in-the-past. Swing pushes it later still.
+      const grid = this.ctx ? this.ctx.currentTime + 0.005 : undefined
+      this.player.onStep(this.advanceStep(grid))
     }
     this.midi.onClockTempo = (bpm) => {
       if (this.clockSource !== 'external') return
@@ -138,14 +143,45 @@ export class Runtime {
     if (this.clock) this.clock.bpm = bpm
   }
 
+  /** Swing amount 0..1. Takes effect on the next step — no boundary wait,
+   * because swing shifts when chords sound, not which chords are chosen. */
+  setSwing(amount: number): void {
+    this.swing = Number.isFinite(amount) ? Math.max(0, Math.min(1, amount)) : 0
+  }
+
+  setSwingUnit(unit: SwingUnit): void {
+    this.swingUnit = unit
+  }
+
+  /** Tempo actually governing the grid right now. */
+  private get activeBpm(): number {
+    return this.clockSource === 'external' ? (this.externalBpm ?? this.bpm) : this.bpm
+  }
+
+  private stepSeconds(): number {
+    return 60 / (this.activeBpm * STEPS_PER_BEAT)
+  }
+
+  /**
+   * Advance the take's step counter and turn the step's straight grid time into
+   * the time it should actually sound, with swing applied. Both clock sources
+   * funnel through here, so the synth, the MIDI port and the .mid export all
+   * inherit the same groove.
+   */
+  private advanceStep(gridTime?: number): number | undefined {
+    this.currentStep += 1
+    this.currentStepSwing = swingDelaySteps(this.currentStep, this.swing, this.swingUnit)
+    if (gridTime === undefined) return undefined
+    return gridTime + this.currentStepSwing * this.stepSeconds()
+  }
+
   /** Create the audio graph + clock. Must be called from a user gesture. */
   ensureAudio(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext()
       this.synth = new PreviewSynth(this.ctx)
       this.clock = new LookaheadClock(this.ctx, (_step, atTime) => {
-        this.currentStep += 1 // monotonic 16th-step index for the recorder
-        this.player.onStep(atTime)
+        this.player.onStep(this.advanceStep(atTime))
       })
       this.clock.stepsPerBeat = STEPS_PER_BEAT // 16th-note grid
       this.clock.bpm = this.bpm // apply any tempo chosen before first Play
@@ -180,6 +216,7 @@ export class Runtime {
   /** Reset the step counter + recording at the start of a take. */
   private beginTake(): void {
     this.currentStep = -1
+    this.currentStepSwing = 0
     this.recordBase = 0
     this.recorded = []
     this.onRecordingChanged?.(0)
@@ -188,11 +225,13 @@ export class Runtime {
   /** Record a voiced chord (or a silence boundary) at the current take step.
    * The SMF writer positions events in quarter-note beats, so convert the
    * 16th-note step index (step / STEPS_PER_BEAT) — sub-beat onsets land as
-   * fractional beats. */
+   * fractional beats. The step's swing delay is folded in, so an exported
+   * take is phrased exactly as it sounded rather than snapping back to
+   * straight time. */
   private record(notes: number[], velocity: number): void {
     if (this.recorded.length >= MAX_RECORDED_EVENTS) return
-    const beat = Math.max(0, this.currentStep - this.recordBase) / STEPS_PER_BEAT
-    this.recorded.push({ startBeat: beat, notes: [...notes], velocity })
+    const step = Math.max(0, this.currentStep - this.recordBase) + this.currentStepSwing
+    this.recorded.push({ startBeat: step / STEPS_PER_BEAT, notes: [...notes], velocity })
     this.onRecordingChanged?.(this.recorded.filter((c) => c.notes.length > 0).length)
   }
 

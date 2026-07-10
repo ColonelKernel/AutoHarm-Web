@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore, SEED_LIST, KEY_ROOTS, MODES } from '../state/store'
 import { MODEL_LIST } from '../engine/voicing/performanceMap'
 import { SESSION_MODES, type ModelName, type SessionMode } from '../engine/markov/config'
+import { swingDelaySteps, swingLabel, SWING_UNITS, type SwingUnit } from '../engine/player/swing'
 import type { PlayerMode } from '../engine/voicing/performanceMap'
 
 function Dial(props: {
@@ -28,20 +29,48 @@ function Dial(props: {
   )
 }
 
+const CELL_PX = 15
+const GAP_PX = 3
+const PITCH_PX = CELL_PX + GAP_PX // horizontal distance between adjacent steps
+
 /** Visualizes the current rhythm template on its 16th-note grid — filled cells
- * are chord onsets, every 4th step (a beat) is emphasized. */
-function RhythmGrid({ steps, onsets }: { steps: number; onsets: number[] }) {
+ * are chord onsets, every 4th step (a beat) is emphasized. Cells are laid out
+ * at their *swung* position, so raising Swing visibly slides the off-beats late
+ * while the beats stay anchored. */
+function RhythmGrid({
+  steps,
+  onsets,
+  swing,
+  swingUnit,
+}: {
+  steps: number
+  onsets: number[]
+  swing: number
+  swingUnit: SwingUnit
+}) {
   const set = new Set(onsets)
   return (
-    <div className="rhythm-grid" aria-label="rhythm pattern">
-      {Array.from({ length: steps }, (_, i) => (
-        <span
-          key={i}
-          className={
-            'rg-cell' + (set.has(i) ? ' on' : '') + (i % 4 === 0 ? ' beat' : '') + (i % 16 === 0 ? ' bar' : '')
-          }
-        />
-      ))}
+    <div
+      className="rhythm-grid"
+      style={{ width: steps * PITCH_PX + PITCH_PX, height: CELL_PX }}
+      aria-label={`rhythm pattern, ${onsets.length} chords per ${steps / 16} bar(s), swing ${swingLabel(swing)}`}
+    >
+      {Array.from({ length: steps }, (_, i) => {
+        const delay = swingDelaySteps(i, swing, swingUnit)
+        return (
+          <span
+            key={i}
+            style={{ left: (i + delay) * PITCH_PX }}
+            className={
+              'rg-cell' +
+              (set.has(i) ? ' on' : '') +
+              (i % 4 === 0 ? ' beat' : '') +
+              (i % 16 === 0 ? ' bar' : '') +
+              (delay > 0 ? ' swung' : '')
+            }
+          />
+        )
+      })}
     </div>
   )
 }
@@ -141,7 +170,10 @@ export default function App() {
 
       <section className="panel">
         <h2>Transport</h2>
-        <p className="panel-sub">Start &amp; stop, set the tempo, and shape the phrasing.</p>
+        <p className="panel-sub">
+          Start &amp; stop, set the tempo, and shape the phrasing. <em>Swing</em> slides the
+          off-beats late — the grid below shows where each chord actually lands.
+        </p>
         <div className="transport">
           <button
             className="primary"
@@ -198,8 +230,24 @@ export default function App() {
             </select>
           </div>
           <Dial label="Rhythm" value={s.rhythm} onChange={s.setRhythm} display={s.rhythmName} />
+          <Dial label="Swing" value={s.swing} onChange={s.setSwing} display={s.swingName} />
+          <div className="control">
+            <label>Swing feel</label>
+            <select value={s.swingUnit} onChange={(e) => s.setSwingUnit(e.target.value as SwingUnit)}>
+              {SWING_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u === '8th' ? '8th (jazz)' : '16th (funk)'}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
-        <RhythmGrid steps={s.rhythmSteps} onsets={s.rhythmOnsets} />
+        <RhythmGrid
+          steps={s.rhythmSteps}
+          onsets={s.rhythmOnsets}
+          swing={s.swing}
+          swingUnit={s.swingUnit}
+        />
       </section>
 
       <section className="panel">

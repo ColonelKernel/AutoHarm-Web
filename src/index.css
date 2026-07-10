@@ -271,27 +271,39 @@ button:disabled { opacity: 0.45; cursor: default; }
 
 .readout { font-size: 12px; color: var(--accent-2); min-height: 16px; }
 
-/* Rhythm step-grid visualization */
+/* Rhythm step-grid visualization. Cells are absolutely positioned so swing can
+ * slide the off-beats off the straight grid while the beats stay anchored. */
 .rhythm-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px;
+  position: relative;
   margin-top: 14px;
-  max-width: 640px;
+  max-width: 100%;
 }
 
 .rg-cell {
+  position: absolute;
+  top: 0;
   width: 15px;
   height: 15px;
   border-radius: 3px;
   background: var(--panel-2);
   border: 1px solid #2c3140;
+  transition: left 0.12s ease-out;
 }
 
 .rg-cell.beat { border-color: #3a4152; }
 .rg-cell.bar { border-color: #55617a; }
+.rg-cell.swung { border-color: var(--accent-2); }
 .rg-cell.on {
   background: var(--accent);
   border-color: var(--accent);
   box-shadow: 0 0 6px #4fc3f766;
+}
+.rg-cell.on.swung {
+  background: var(--accent-2);
+  border-color: var(--accent-2);
+  box-shadow: 0 0 6px #ffb74d66;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rg-cell { transition: none; }
 }

@@ -12,6 +12,7 @@ import {
   STEPS_PER_BAR,
   rhythmToTemplate,
 } from '../engine/player/autoPlayer'
+import { swingLabel, DEFAULT_SWING_UNIT, type SwingUnit } from '../engine/player/swing'
 import { MidiIO, type MidiPortInfo } from '../io/midi'
 import { downloadBytes } from '../io/download'
 import type { ModelName, SessionMode } from '../engine/markov/config'
@@ -58,6 +59,9 @@ interface AppState {
   rhythmName: string
   rhythmOnsets: number[] // step indices of chord onsets (for the grid display)
   rhythmSteps: number // grid length in steps (spanBars * STEPS_PER_BAR)
+  swing: number // 0 = straight .. 1 = hard shuffle
+  swingUnit: SwingUnit // which subdivision swings
+  swingName: string
 
   // voicing dials
   voicingLevel: number
@@ -104,6 +108,8 @@ interface AppState {
   setHold(on: boolean): void
   setPhraseBars(bars: number): void
   setRhythm(v: number): void
+  setSwing(v: number): void
+  setSwingUnit(u: SwingUnit): void
   setVoicingLevel(v: number): void
   setVoiceDistance(v: number): void
   setColorMajor(v: number): void
@@ -155,6 +161,9 @@ export const useStore = create<AppState>((set, get) => ({
   rhythmName: TEMPLATES[DEFAULT_TEMPLATE_ID].name,
   rhythmOnsets: TEMPLATES[DEFAULT_TEMPLATE_ID].onsets,
   rhythmSteps: TEMPLATES[DEFAULT_TEMPLATE_ID].spanBars * STEPS_PER_BAR,
+  swing: 0,
+  swingUnit: DEFAULT_SWING_UNIT,
+  swingName: swingLabel(0),
 
   voicingLevel: 0,
   voiceDistance: 0,
@@ -386,6 +395,14 @@ export const useStore = create<AppState>((set, get) => ({
     const name = getRuntime().player.setRhythm(v)
     const t = TEMPLATES[rhythmToTemplate(v)]
     set({ rhythm: v, rhythmName: name, rhythmOnsets: t.onsets, rhythmSteps: t.spanBars * STEPS_PER_BAR })
+  },
+  setSwing(v) {
+    getRuntime().setSwing(v)
+    set({ swing: v, swingName: swingLabel(v) })
+  },
+  setSwingUnit(u) {
+    getRuntime().setSwingUnit(u)
+    set({ swingUnit: u })
   },
 
   setVoicingLevel(v) {
