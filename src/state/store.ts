@@ -30,6 +30,7 @@ import {
 } from '../engine/macros/mapping'
 import { presetById, surpriseMe, SURPRISE_ID, type MusicalPreset } from '../engine/macros/presets'
 import { CUSTOM_NAME, randomize as randomizeGrid, rotate as rotateGrid, toggleOnset } from '../engine/rhythm/customGrid'
+import { loadSettings, saveSettings } from './persistence'
 
 export type AppMode = 'generate' | 'respond' | 'perform'
 export type ViewMode = 'quick' | 'lab'
@@ -404,6 +405,56 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Apply store defaults to the engine (mode differs from the port default).
     rt.player.setMode(get().mode)
+
+    // Restore persisted preferences through the real actions so engines see
+    // them (never restores playback / devices / half-captures).
+    const saved = loadSettings()
+    if (saved) {
+      const a = get()
+      if (saved.macros) {
+        a.setMacro('familiarity', saved.macros.familiarity)
+        a.setMacro('harmonicColor', saved.macros.harmonicColor)
+        a.setMacro('tension', saved.macros.tension)
+        a.setMacro('motion', saved.macros.motion)
+      }
+      if (saved.keyRoot !== undefined) a.setKeyRoot(saved.keyRoot)
+      if (saved.keyMode) a.setKeyMode(saved.keyMode)
+      if (saved.bpm !== undefined) a.setBpm(saved.bpm)
+      if (saved.phraseSteps !== undefined) a.setPhraseSteps(saved.phraseSteps)
+      if (saved.repetitions !== undefined) a.setRepetitions(saved.repetitions)
+      if (saved.synthOn !== undefined) a.setSynthOn(saved.synthOn)
+      if (saved.synthVolume !== undefined) a.setSynthVolume(saved.synthVolume)
+      set({
+        ...(saved.appMode ? { appMode: saved.appMode } : {}),
+        ...(saved.viewMode ? { viewMode: saved.viewMode } : {}),
+        ...(saved.displayMode ? { displayMode: saved.displayMode } : {}),
+        ...(saved.activePresetId !== undefined ? { activePresetId: saved.activePresetId } : {}),
+      })
+      rt.appMode = get().appMode
+    }
+
+    // Persist preference changes (trailing debounce; cheap JSON).
+    let saveTimer: ReturnType<typeof setTimeout> | null = null
+    useStore.subscribe((s) => {
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => {
+        saveSettings({
+          appMode: s.appMode,
+          viewMode: s.viewMode,
+          displayMode: s.displayMode,
+          macros: s.macros,
+          activePresetId: s.activePresetId,
+          keyRoot: s.keyRoot,
+          keyMode: s.keyMode,
+          bpm: s.bpm,
+          phraseSteps: s.phraseSteps,
+          repetitions: s.repetitions,
+          synthOn: s.synthOn,
+          synthVolume: s.synthVolume,
+        })
+      }, 400)
+    })
+
     set({ loaded: true, status: 'ready' })
   },
 
