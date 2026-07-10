@@ -163,3 +163,66 @@ describe('key + mode handlers (carried from V1)', () => {
     expect(player.cycleMode()).toBe('loop')
   })
 })
+
+describe('review regressions', () => {
+  const appliedEvents = () =>
+    events.filter((e) => e.type === 'progressionApplied') as Array<{
+      type: 'progressionApplied'
+      progression: Progression
+      origin: 'user' | 'auto'
+    }>
+
+  it('commits a bar-staged USER edit on stop instead of discarding it', () => {
+    // The store shows a structural edit optimistically the moment it is made.
+    // Dropping the staged swap on stop left the engine playing the OLD
+    // progression forever while the timeline showed the new one.
+    const twoBars = makeProgression([
+      makeSlot('C:maj', 16, 'generated'),
+      makeSlot('F:maj', 16, 'generated'),
+    ])
+    player.setProgression(twoBars)
+    player.start()
+    pump(4) // mid-bar, before the swap point
+    const edited = makeProgression([
+      makeSlot('C:maj', 16, 'manual'),
+      makeSlot('D:min7', 16, 'manual'),
+    ])
+    player.setProgression(edited, 'bar')
+    expect(player.activeProgression).toBe(twoBars) // still staged
+
+    player.stop()
+    expect(player.activeProgression).toBe(edited) // committed, no divergence
+  })
+
+  it('discards a cycle-staged AUTO variation on stop (the store never adopted it)', () => {
+    const base = makeProgression([makeSlot('C:maj', 16, 'generated')])
+    player.setProgression(base)
+    player.start()
+    pump(2)
+    player.stageNext(makeProgression([makeSlot('E:min', 16, 'generated')]), 'auto')
+    player.stop()
+    expect(player.activeProgression).toBe(base)
+  })
+
+  it('tags every applied progression with its origin', () => {
+    player.setProgression(oneBar(), 'now', 'user')
+    expect(appliedEvents().at(-1)?.origin).toBe('user')
+    player.setProgression(makeProgression([makeSlot('G:7', 16, 'response')]), 'now', 'auto')
+    expect(appliedEvents().at(-1)?.origin).toBe('auto')
+  })
+
+  it('clamps the slot cursors when a shorter progression replaces a longer one', () => {
+    player.setProgression(oneBar()) // 4 slots
+    player.start()
+    pump(13) // currentSlotIndex = 3
+    expect(player.state.currentSlotIndex).toBe(3)
+    player.setHold(true)
+    expect(player.state.heldSlotIndex).toBe(3)
+    // A one-slot replacement would leave both cursors pointing at slot 3.
+    player.setProgression(makeProgression([makeSlot('A:min', 16, 'generated')]), 'now')
+    expect(player.state.currentSlotIndex).toBe(0)
+    expect(player.state.heldSlotIndex).toBe(0)
+    pump(4) // hold must still vamp a real chord, not crash on undefined
+    expect(chordEvents().at(-1)?.symbol).toBe('A:min')
+  })
+})

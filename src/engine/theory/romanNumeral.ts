@@ -23,7 +23,10 @@ export interface RomanAnalysis {
 
 // Degree spelling by semitone distance from the tonic.
 const MAJ_NUMERALS = ['I', 'bII', 'II', 'bIII', 'III', 'IV', '#IV', 'V', 'bVI', 'VI', 'bVII', 'VII']
-const MIN_NUMERALS = ['I', 'bII', 'II', 'III', '#III', 'IV', '#IV', 'V', 'VI', '#VI', 'VII', '#VII']
+// In minor, degree 10 is the natural subtonic (VII) and degree 11 the raised
+// leading tone. Both spell "VII"; the chord quality tells them apart in the
+// usual way — subtonic VII is major, the leading-tone chord is vii° / viiø7.
+const MIN_NUMERALS = ['I', 'bII', 'II', 'III', '#III', 'IV', '#IV', 'V', 'VI', '#VI', 'VII', 'VII']
 
 const MAJ_DIATONIC = new Set([0, 2, 4, 5, 7, 9, 11])
 const MIN_DIATONIC = new Set([0, 2, 3, 5, 7, 8, 10, 11]) // natural + raised leading tone

@@ -11,13 +11,16 @@ export type PlayerEvent =
   | { type: 'stop'; at?: number }
   | { type: 'playoff' }
   | { type: 'error'; code: string; detail?: string }
+  | { type: 'notice'; message: string } // non-fatal, user-facing consequence
   | { type: 'readout'; key: string; value: string | number }
   | { type: 'tempo'; bpm: number } // external MIDI-clock tempo estimate
   | { type: 'log'; message: string }
   // V2 progression playback
   | { type: 'cycle'; index: number; step: number; at?: number } // phrase wrapped
   | { type: 'slotOnset'; slotId: string; at?: number } // a slot's chord struck
-  | { type: 'progressionApplied'; progression: Progression } // staged swap landed
+  // `origin: 'auto'` = the machine replaced the progression during playback
+  // (regen variation, a Respond answer). Those must not enter undo history.
+  | { type: 'progressionApplied'; progression: Progression; origin: 'user' | 'auto' }
   | { type: 'staged'; pending: boolean } // a variation is queued for the boundary
   | { type: 'genProgress'; done: number; total: number } // offline generation
   | { type: 'respond'; phase: RespondPhase; progress: number; repsLeft: number }

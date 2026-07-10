@@ -47,6 +47,11 @@ export class RespondEngine {
   private windowStart = -1 // absolute step of the window's first step
   private kicked = false
   private generationDone = false
+  /** Bumped by newListen/cancel. A generation started under an older listen
+   * is dropped on resolve — the phase alone cannot tell window N's
+   * 'listening' from window N+1's, so a stale reply could otherwise answer
+   * a phrase the user never played. */
+  private listenEpoch = 0
 
   constructor(private effects: RespondEffects) {}
 
@@ -63,6 +68,7 @@ export class RespondEngine {
   /** Arm capture. Allowed from idle/ready — never mid-commitment. */
   newListen(): boolean {
     if (this.phase !== 'idle' && this.phase !== 'ready') return false
+    this.listenEpoch += 1
     this.capture.clear()
     this.windowStart = -1
     this.kicked = false
@@ -74,8 +80,11 @@ export class RespondEngine {
 
   /** Abort listening/analysis; playback resumes as it was. */
   cancel(): void {
+    this.listenEpoch += 1 // any in-flight generation is now stale
     this.capture.clear()
     this.progressSteps = -1
+    this.kicked = false
+    this.generationDone = false
     if (this.phase === 'listening' || this.phase === 'armed' || this.phase === 'analyzing') {
       this.effects.mute(false)
     }
@@ -162,16 +171,27 @@ export class RespondEngine {
   }
 
   private kickGeneration(notes: CapturedNote[], analysis: MelodyAnalysis): void {
+    const epoch = this.listenEpoch
     void this.effects.generateResponse(notes, analysis).then((p) => {
-      if (this.phase !== 'listening' && this.phase !== 'analyzing') return // cancelled
+      // Stale: this listen was cancelled or superseded by a New Listen. The
+      // phase check alone is not enough — a new window can already be back in
+      // 'listening' by the time an old generation resolves.
+      if (epoch !== this.listenEpoch) return
+      if (this.phase !== 'listening' && this.phase !== 'analyzing') return
       if (p) {
         this.generationDone = true
         this.lastAnalysis = this.lastAnalysis ?? analysis
-      } else if (this.phase === 'analyzing') {
-        // Generation failed — resume prior playback rather than hang muted.
-        this.effects.mute(false)
-        this.setPhase('idle')
+        return
       }
+      // Generation failed. While still listening, re-arm the kick so
+      // closeWindow regenerates from the full take instead of silently
+      // hanging muted forever (kicked stays true otherwise).
+      if (this.phase === 'listening') {
+        this.kicked = false
+        return
+      }
+      this.effects.mute(false) // 'analyzing': resume prior playback
+      this.setPhase('idle')
     })
   }
 }

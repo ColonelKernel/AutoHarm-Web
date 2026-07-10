@@ -106,6 +106,19 @@ describe('melody analysis', () => {
     const a = analyzeMelody([note(60, 8, 16), note(67, 8, 16)], 16)
     expect(a.terminalPitchClass).toBe(7)
   })
+
+  it('the dyad tie-break compares pitches, not pitch classes (review regression)', () => {
+    // Capture order puts the HIGHER note first. Comparing a MIDI number
+    // against the stored pitch class is always true, so the rule silently
+    // degraded to "last captured note wins" and returned C instead of G.
+    const a = analyzeMelody([note(67, 8, 16), note(60, 8, 16)], 16)
+    expect(a.terminalPitchClass).toBe(7)
+  })
+
+  it('a later onset always wins, even when its note is lower', () => {
+    const a = analyzeMelody([note(72, 0, 8), note(60, 8, 16)], 16)
+    expect(a.terminalPitchClass).toBe(0)
+  })
 })
 
 describe('scoring', () => {
@@ -271,5 +284,85 @@ describe('RespondEngine state machine', () => {
     await new Promise((r) => setTimeout(r, 0))
     expect(engine.phase).toBe('idle')
     expect(calls[calls.length - 1]).toBe('mute:false')
+  })
+})
+
+describe('RespondEngine — stale generation across listen cycles (review regression)', () => {
+  /** Harness that lets a generation resolve at an arbitrary later moment. */
+  function harness(phraseSteps = 32, repetitions = 2) {
+    const calls: string[] = []
+    const pending: Array<(p: ReturnType<typeof makeProgression> | null) => void> = []
+    const engine = new RespondEngine({
+      mute: (on) => calls.push(`mute:${on}`),
+      generateResponse: () => {
+        calls.push('generate')
+        return new Promise((r) => pending.push(r))
+      },
+    })
+    engine.phraseSteps = phraseSteps
+    engine.repetitions = repetitions
+    const resolveNth = (i: number) =>
+      pending[i](makeProgression([makeSlot('C:maj', phraseSteps, 'response')]))
+    return { engine, calls, pending, resolveNth }
+  }
+
+  const listenThrough = (engine: RespondEngine, start: number, steps: number) => {
+    engine.onCycle(start)
+    for (let s = start; s < start + steps; s++) engine.onStep(s)
+  }
+
+  it("a cancelled listen's generation can never answer a later phrase", async () => {
+    const { engine, pending, resolveNth } = harness(32)
+    engine.newListen()
+    listenThrough(engine, 0, 32) // kicks generation #0
+    expect(pending.length).toBe(1)
+
+    engine.cancel()
+    expect(engine.phase).toBe('idle')
+
+    // A second listen starts and reaches 'listening'...
+    engine.newListen()
+    engine.onCycle(64)
+    expect(engine.phase).toBe('listening')
+
+    // ...and only NOW the first (abandoned) generation resolves. Without a
+    // per-listen epoch the phase check passes and window 2 would answer with
+    // window 1's harmony before its own phrase was heard.
+    resolveNth(0)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(engine.phase).toBe('listening') // still capturing, unmuted response NOT begun
+
+    // Window 2's own generation still works.
+    for (let s = 64; s < 96; s++) engine.onStep(s)
+    resolveNth(1)
+    await new Promise((r) => setTimeout(r, 0))
+    engine.onCycle(96)
+    expect(engine.phase).toBe('responding')
+  })
+
+  it('a failed generation while still listening re-arms so closeWindow retries', async () => {
+    const { engine, calls, pending } = harness(32)
+    engine.newListen()
+    listenThrough(engine, 0, 32)
+    expect(calls.filter((c) => c === 'generate').length).toBe(1)
+
+    pending[0](null) // generation failed, still mid-window
+    await new Promise((r) => setTimeout(r, 0))
+    expect(engine.phase).toBe('listening') // not silently hung
+
+    engine.onCycle(32) // window closes -> must regenerate from the full take
+    expect(calls.filter((c) => c === 'generate').length).toBe(2)
+    expect(engine.phase).toBe('analyzing')
+  })
+
+  it('cancel() resets the kick so a later listen is not starved', () => {
+    const { engine, calls } = harness(16)
+    engine.newListen()
+    listenThrough(engine, 0, 16)
+    expect(calls.filter((c) => c === 'generate').length).toBe(1)
+    engine.cancel()
+    engine.newListen()
+    listenThrough(engine, 32, 16)
+    expect(calls.filter((c) => c === 'generate').length).toBe(2)
   })
 })

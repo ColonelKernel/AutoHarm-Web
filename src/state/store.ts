@@ -50,6 +50,7 @@ interface AppState {
   loadError: string | null
   status: string
   lastError: string | null
+  notice: string | null // non-fatal consequence of an action (e.g. locks released)
   currentChord: string
   currentNotes: number[]
   history: HistoryEntry[]
@@ -235,6 +236,7 @@ export const useStore = create<AppState>((set, get) => ({
   loadError: null,
   status: 'loading',
   lastError: null,
+  notice: null,
   currentChord: '—',
   currentNotes: [],
   history: [],
@@ -351,16 +353,25 @@ export const useStore = create<AppState>((set, get) => ({
           // set the store synchronously and echo back the SAME object, so
           // an identity match means nothing to record.
           const cur = get().progression
-          if (e.progression !== cur) {
-            if (cur.slots.length > 0) editHistory.push(cur)
-            set({
-              progression: e.progression,
-              canUndo: editHistory.canUndo,
-              canRedo: editHistory.canRedo,
-            })
-          }
+          if (e.progression === cur) break
+          // Autonomous replacements (regen-mode variations, Respond answers,
+          // MIDI-steered rerolls) are performance events, not edits — they
+          // must not push onto the undo stack or clear the redo branch.
+          if (e.origin === 'user' && cur.slots.length > 0) editHistory.push(cur)
+          const ids = new Set(e.progression.slots.map((sl) => sl.id))
+          set((s) => ({
+            progression: e.progression,
+            canUndo: editHistory.canUndo,
+            canRedo: editHistory.canRedo,
+            // Regeneration mints new slot ids; a stale selection would show a
+            // blank explanation panel forever.
+            selectedSlotId: s.selectedSlotId && ids.has(s.selectedSlotId) ? s.selectedSlotId : null,
+          }))
           break
         }
+        case 'notice':
+          set({ notice: e.message })
+          break
         case 'slotOnset':
           set({ playingSlotId: e.slotId })
           break
@@ -433,9 +444,19 @@ export const useStore = create<AppState>((set, get) => ({
       rt.appMode = get().appMode
     }
 
-    // Persist preference changes (trailing debounce; cheap JSON).
+    // Persist preference changes (trailing debounce). The subscription fires
+    // on EVERY store patch, including per-step playingSlotId / respondProgress
+    // during playback — a naive debounce would be reset ~16x/sec and never
+    // fire. Gate on a cheap signature of the persisted fields only.
     let saveTimer: ReturnType<typeof setTimeout> | null = null
+    let lastSig = ''
     useStore.subscribe((s) => {
+      const sig =
+        `${s.appMode}|${s.viewMode}|${s.displayMode}|${s.activePresetId}|${s.keyRoot}|${s.keyMode}|` +
+        `${s.bpm}|${s.phraseSteps}|${s.repetitions}|${s.synthOn}|${s.synthVolume}|` +
+        `${s.macros.familiarity}|${s.macros.harmonicColor}|${s.macros.tension}|${s.macros.motion}`
+      if (sig === lastSig) return
+      lastSig = sig
       if (saveTimer) clearTimeout(saveTimer)
       saveTimer = setTimeout(() => {
         saveSettings({
