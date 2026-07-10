@@ -9,9 +9,11 @@
 import type { Rng } from '../random'
 import { choice } from '../random'
 import type { FallbackPolicy } from '../markov/config'
+import type { CandidateChord } from '../markov/markovEngine'
 import { JazzNetVocab } from './vocab'
 import type { Hidden, RunResult } from './ortRunner'
 import { INVALID_CHORD, simplifyChord } from '../theory/chordSimplifier'
+import { applySamplingDistribution } from './inference'
 import {
   NeuralSessionState,
   sampleSession,
@@ -72,6 +74,38 @@ export class NeuralEngine {
     const simplified = simplifyChord(chord)
     if (simplified === INVALID_CHORD) return null
     return this.vocab.chordIndex(simplified)
+  }
+
+  /**
+   * PEEK at the next-chord distribution without advancing the session: one
+   * forward pass on the current hidden state (or [BOS, idx] from cold), the
+   * same temperature/masking as sampling, top-`limit` of the softmax. The
+   * session's hidden/trace/step are untouched, so scoring candidates never
+   * perturbs the musical walk. Returns [] on unknown chords or runner errors.
+   */
+  async candidates(rawInput: string, session: boolean, limit = 24): Promise<CandidateChord[]> {
+    const chord = rawInput.trim()
+    if (!chord) return []
+    const idx = this.resolveChord(chord)
+    if (idx === null) return []
+    const hidden = session ? this.session.hidden : null
+    const exclude = this.excludeInput && hidden === null ? [idx] : null
+    const tokens = hidden === null ? [this.vocab.bosIdx, idx] : [idx]
+    try {
+      const { logitsLast } = await this.runner.run(tokens, hidden)
+      const probs = applySamplingDistribution(logitsLast, this.vocab, this.temperature, exclude)
+      const pairs: Array<[number, number]> = []
+      for (let i = 0; i < probs.length; i++) if (probs[i] > 0) pairs.push([i, probs[i]])
+      pairs.sort((a, b) => b[1] - a[1])
+      const out: CandidateChord[] = []
+      for (const [i, p] of pairs.slice(0, limit)) {
+        const symbol = this.vocab.indexChord(i)
+        if (symbol) out.push({ symbol, prior: p }) // specials already masked to 0
+      }
+      return out
+    } catch {
+      return []
+    }
   }
 
   async sample(rawInput: string, session: boolean): Promise<NeuralSampleResult> {

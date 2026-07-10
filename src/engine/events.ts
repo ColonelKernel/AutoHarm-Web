@@ -1,5 +1,8 @@
 /** Typed event emitter — replaces Max.outlet in the ported player code. */
 
+import type { Progression } from './progression/types'
+import type { RespondPhase } from './respond/types'
+
 export type PlayerEvent =
   | { type: 'status'; value: string }
   | { type: 'output'; symbol: string }
@@ -11,6 +14,13 @@ export type PlayerEvent =
   | { type: 'readout'; key: string; value: string | number }
   | { type: 'tempo'; bpm: number } // external MIDI-clock tempo estimate
   | { type: 'log'; message: string }
+  // V2 progression playback
+  | { type: 'cycle'; index: number; step: number; at?: number } // phrase wrapped
+  | { type: 'slotOnset'; slotId: string; at?: number } // a slot's chord struck
+  | { type: 'progressionApplied'; progression: Progression } // staged swap landed
+  | { type: 'staged'; pending: boolean } // a variation is queued for the boundary
+  | { type: 'genProgress'; done: number; total: number } // offline generation
+  | { type: 'respond'; phase: RespondPhase; progress: number; repsLeft: number }
 
 export type PlayerEventListener = (e: PlayerEvent) => void
 

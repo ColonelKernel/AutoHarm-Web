@@ -38,6 +38,12 @@ export interface SampleResult {
   mix?: string | null
 }
 
+/** One entry of the next-chord distribution (model prior, current key). */
+export interface CandidateChord {
+  symbol: string
+  prior: number
+}
+
 export interface MarkovEngineOptions {
   fallback?: FallbackPolicy
   seed?: number
@@ -96,6 +102,28 @@ export class MarkovEngine {
 
   getState(): { color: number; adventure: number; key: string; gravity: number } {
     return { color: this.color, adventure: this.adventure, key: this.key, gravity: this.gravity }
+  }
+
+  /**
+   * The full next-chord distribution `sample()` would draw from — same blend,
+   * temperature and cadence math, transposed back to the current key, sorted
+   * by probability. Includes the pooled-"all" first fallback so out-of-window
+   * chords still yield candidates; policy fallbacks (echo/global-top) are
+   * sampling-only and return []. No RNG involved.
+   */
+  candidates(rawInput: string, limit = 24): CandidateChord[] {
+    const chord = rawInput.trim()
+    if (!chord) return []
+    const [normIn, offset] = normalizeToKey(chord, this.key)
+    const weights = colorWeights(this.color, corpusNames(this.corpora))
+    const tau = temperature(this.adventure)
+    const [, mode] = parseKey(this.key)
+    let choices = blendedChoices(this.corpora, weights, tau, normIn, mode, this.gravity)
+    if (choices.length === 0) {
+      const dist = this.corpora.corpora.get('all')?.distBySource.get(normIn)
+      if (dist && dist.size > 0) choices = applyCadence(applyTemperature(dist, tau), mode, this.gravity)
+    }
+    return choices.slice(0, limit).map(([t, p]) => ({ symbol: transposeChord(t, -offset), prior: p }))
   }
 
   // --- sampling -------------------------------------------------------------

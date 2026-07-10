@@ -15,7 +15,7 @@
  * or the player's state machine — this is only where each step sits in time.
  */
 
-import { STEPS_PER_BEAT } from './autoPlayer'
+import { STEPS_PER_BEAT } from './templates'
 
 export type SwingUnit = '8th' | '16th'
 

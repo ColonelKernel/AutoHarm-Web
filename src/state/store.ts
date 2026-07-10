@@ -11,8 +11,31 @@ import {
   DEFAULT_TEMPLATE_ID,
   STEPS_PER_BAR,
   rhythmToTemplate,
-} from '../engine/player/autoPlayer'
+} from '../engine/player/templates'
 import { swingLabel, DEFAULT_SWING_UNIT, type SwingUnit } from '../engine/player/swing'
+import { makeProgression, type Progression } from '../engine/progression/types'
+import {
+  duplicate as opDuplicate,
+  move as opMove,
+  remove as opRemove,
+  replaceSymbol as opReplaceSymbol,
+  setDuration as opSetDuration,
+  toggleLock as opToggleLock,
+} from '../engine/progression/operations'
+import { ProgressionHistory } from '../engine/progression/history'
+import {
+  DEFAULT_MACROS,
+  mapMacrosToEngineParameters,
+  type MacroState,
+} from '../engine/macros/mapping'
+import { presetById, surpriseMe, SURPRISE_ID, type MusicalPreset } from '../engine/macros/presets'
+import { CUSTOM_NAME, randomize as randomizeGrid, rotate as rotateGrid, toggleOnset } from '../engine/rhythm/customGrid'
+import { loadSettings, saveSettings } from './persistence'
+
+export type AppMode = 'generate' | 'respond' | 'perform'
+export type ViewMode = 'quick' | 'lab'
+export type DisplayMode = 'symbols' | 'roman' | 'both'
+export type MacroName = keyof MacroState
 import { MidiIO, type MidiPortInfo } from '../io/midi'
 import { downloadBytes } from '../io/download'
 import type { ModelName, SessionMode } from '../engine/markov/config'
@@ -35,6 +58,29 @@ interface AppState {
   clockSource: 'internal' | 'external'
   externalBpm: number | null
   recordedCount: number // sounding chords captured in the current take
+
+  // V2 canonical progression (mirror of the player's active progression)
+  progression: Progression
+  playingSlotId: string | null // slot currently sounding (timeline highlight)
+  generating: boolean
+  appMode: AppMode
+  viewMode: ViewMode
+  displayMode: DisplayMode
+  selectedSlotId: string | null
+  canUndo: boolean
+  canRedo: boolean
+  variationQueued: boolean
+
+  // V2 macros + presets
+  macros: MacroState
+  /** Macros whose underlying parameters were hand-edited in Lab ("Custom"). */
+  customMacros: Partial<Record<MacroName, boolean>>
+  activePresetId: string | null
+  phraseSteps: number
+  repetitions: number // respond-mode response commitment
+  respondPhase: 'idle' | 'armed' | 'listening' | 'analyzing' | 'responding' | 'ready'
+  respondProgress: number // steps into the capture window (-1 outside)
+  respondRepsLeft: number
 
   // generator dials
   color: number
@@ -86,7 +132,34 @@ interface AppState {
   init(): Promise<void>
   enableMidi(): Promise<void>
   togglePlay(): void
+  generateNew(): Promise<void>
   reroll(): void
+  setAppMode(m: AppMode): void
+  setViewMode(v: ViewMode): void
+  setDisplayMode(d: DisplayMode): void
+  selectSlot(id: string | null): void
+  editSlotSymbol(id: string, symbol: string): void
+  toggleSlotLock(id: string): void
+  setSlotDuration(id: string, steps: number): void
+  moveSlot(id: string, dir: -1 | 1): void
+  deleteSlot(id: string): void
+  duplicateSlot(id: string): void
+  rerollSlot(id: string): Promise<void>
+  auditionSlot(id: string): void
+  undo(): void
+  redo(): void
+  setMacro(name: MacroName, value: number): void
+  applyPreset(id: string): void
+  setPhraseSteps(steps: number): void
+  setRepetitions(n: number): void
+  newListen(): void
+  cancelListen(): void
+  toggleRhythmStep(step: number): void
+  rotateRhythm(dir: -1 | 1): void
+  randomizeRhythm(): void
+  resetRhythm(): void
+  testConnection(): void
+  testReport: string | null
   panic(): void
   audition(): void
   exportMidi(): void
@@ -125,6 +198,38 @@ interface AppState {
 let historySeq = 0
 let initStarted = false
 
+/** Bounded undo history for progression edits (never transport/IO state). */
+const editHistory = new ProgressionHistory(100)
+
+type SetFn = (partial: Partial<AppState>) => void
+type GetFn = () => AppState
+
+/** Push an edited rhythm pattern to generation + display (marks Custom). */
+function applyPattern(set: SetFn, get: GetFn, pattern: { name: string; spanBars: number; onsets: number[] }): void {
+  getRuntime().setCustomPattern(pattern)
+  set({
+    rhythmName: pattern.name,
+    rhythmOnsets: pattern.onsets,
+    rhythmSteps: pattern.spanBars * STEPS_PER_BAR,
+    customMacros: { ...get().customMacros, motion: true },
+    activePresetId: null,
+  })
+}
+
+/** Apply a pure progression op: record history, update the store NOW (the
+ * user sees their edit immediately), and hand it to playback — structural
+ * edits land on the next bar downbeat while playing. */
+function applyEdit(set: SetFn, get: GetFn, op: (p: Progression) => Progression, structural: boolean): void {
+  const cur = get().progression
+  const next = op(cur)
+  if (next === cur) return // invalid/no-op edits don't pollute history
+  editHistory.push(cur)
+  // Store FIRST: the runtime echoes progressionApplied synchronously, and the
+  // event handler must see the same object (identity) to know it's an echo.
+  set({ progression: next, canUndo: editHistory.canUndo, canRedo: editHistory.canRedo })
+  getRuntime().applyEdit(next, structural)
+}
+
 export const useStore = create<AppState>((set, get) => ({
   loaded: false,
   loadError: null,
@@ -138,6 +243,27 @@ export const useStore = create<AppState>((set, get) => ({
   clockSource: 'internal',
   externalBpm: null,
   recordedCount: 0,
+
+  progression: makeProgression([]),
+  playingSlotId: null,
+  generating: false,
+  appMode: 'generate',
+  viewMode: 'quick',
+  displayMode: 'both',
+  selectedSlotId: null,
+  canUndo: false,
+  canRedo: false,
+  variationQueued: false,
+
+  macros: { ...DEFAULT_MACROS },
+  customMacros: {},
+  activePresetId: null,
+  phraseSteps: 8 * STEPS_PER_BAR,
+  repetitions: 2,
+  respondPhase: 'idle',
+  respondProgress: -1,
+  respondRepsLeft: 0,
+  testReport: null,
 
   color: 0.5,
   adventure: 0.35,
@@ -220,8 +346,35 @@ export const useStore = create<AppState>((set, get) => ({
         case 'tempo':
           set({ externalBpm: e.bpm })
           break
+        case 'progressionApplied': {
+          // Generation results / staged variations arrive here. User edits
+          // set the store synchronously and echo back the SAME object, so
+          // an identity match means nothing to record.
+          const cur = get().progression
+          if (e.progression !== cur) {
+            if (cur.slots.length > 0) editHistory.push(cur)
+            set({
+              progression: e.progression,
+              canUndo: editHistory.canUndo,
+              canRedo: editHistory.canRedo,
+            })
+          }
+          break
+        }
+        case 'slotOnset':
+          set({ playingSlotId: e.slotId })
+          break
+        case 'staged':
+          set({ variationQueued: e.pending })
+          break
+        case 'respond':
+          set({ respondPhase: e.phase, respondProgress: e.progress, respondRepsLeft: e.repsLeft })
+          break
       }
     })
+    // The initial progression was generated inside load(), before this
+    // subscription existed — read it directly.
+    set({ progression: rt.player.activeProgression })
 
     rt.onRecordingChanged = (count) => set({ recordedCount: count })
 
@@ -252,7 +405,56 @@ export const useStore = create<AppState>((set, get) => ({
 
     // Apply store defaults to the engine (mode differs from the port default).
     rt.player.setMode(get().mode)
-    rt.player.setLengthBars(get().phraseBars)
+
+    // Restore persisted preferences through the real actions so engines see
+    // them (never restores playback / devices / half-captures).
+    const saved = loadSettings()
+    if (saved) {
+      const a = get()
+      if (saved.macros) {
+        a.setMacro('familiarity', saved.macros.familiarity)
+        a.setMacro('harmonicColor', saved.macros.harmonicColor)
+        a.setMacro('tension', saved.macros.tension)
+        a.setMacro('motion', saved.macros.motion)
+      }
+      if (saved.keyRoot !== undefined) a.setKeyRoot(saved.keyRoot)
+      if (saved.keyMode) a.setKeyMode(saved.keyMode)
+      if (saved.bpm !== undefined) a.setBpm(saved.bpm)
+      if (saved.phraseSteps !== undefined) a.setPhraseSteps(saved.phraseSteps)
+      if (saved.repetitions !== undefined) a.setRepetitions(saved.repetitions)
+      if (saved.synthOn !== undefined) a.setSynthOn(saved.synthOn)
+      if (saved.synthVolume !== undefined) a.setSynthVolume(saved.synthVolume)
+      set({
+        ...(saved.appMode ? { appMode: saved.appMode } : {}),
+        ...(saved.viewMode ? { viewMode: saved.viewMode } : {}),
+        ...(saved.displayMode ? { displayMode: saved.displayMode } : {}),
+        ...(saved.activePresetId !== undefined ? { activePresetId: saved.activePresetId } : {}),
+      })
+      rt.appMode = get().appMode
+    }
+
+    // Persist preference changes (trailing debounce; cheap JSON).
+    let saveTimer: ReturnType<typeof setTimeout> | null = null
+    useStore.subscribe((s) => {
+      if (saveTimer) clearTimeout(saveTimer)
+      saveTimer = setTimeout(() => {
+        saveSettings({
+          appMode: s.appMode,
+          viewMode: s.viewMode,
+          displayMode: s.displayMode,
+          macros: s.macros,
+          activePresetId: s.activePresetId,
+          keyRoot: s.keyRoot,
+          keyMode: s.keyMode,
+          bpm: s.bpm,
+          phraseSteps: s.phraseSteps,
+          repetitions: s.repetitions,
+          synthOn: s.synthOn,
+          synthVolume: s.synthVolume,
+        })
+      }, 400)
+    })
+
     set({ loaded: true, status: 'ready' })
   },
 
@@ -282,8 +484,189 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  async generateNew() {
+    set({ generating: true })
+    await getRuntime().generateNew()
+    set({ generating: false })
+  },
+
+  setAppMode(m) {
+    const rt = getRuntime()
+    rt.appMode = m
+    // Leaving Respond mid-listen abandons the window cleanly.
+    if (m !== 'respond' && rt.respond?.engaged) rt.cancelListen()
+    set({ appMode: m })
+  },
+  setViewMode(v) {
+    set({ viewMode: v })
+  },
+  setDisplayMode(d) {
+    set({ displayMode: d })
+  },
+  selectSlot(id) {
+    set({ selectedSlotId: id })
+  },
+
+  editSlotSymbol(id, symbol) {
+    applyEdit(set, get, (p) => opReplaceSymbol(p, id, symbol), false)
+  },
+  toggleSlotLock(id) {
+    applyEdit(set, get, (p) => opToggleLock(p, id), false)
+  },
+  setSlotDuration(id, steps) {
+    applyEdit(set, get, (p) => opSetDuration(p, id, steps), true)
+  },
+  moveSlot(id, dir) {
+    applyEdit(set, get, (p) => opMove(p, id, dir), true)
+  },
+  deleteSlot(id) {
+    if (get().selectedSlotId === id) set({ selectedSlotId: null })
+    applyEdit(set, get, (p) => opRemove(p, id), true)
+  },
+  duplicateSlot(id) {
+    applyEdit(set, get, (p) => opDuplicate(p, id), true)
+  },
+  async rerollSlot(id) {
+    set({ generating: true })
+    await getRuntime().rerollSlot(id)
+    set({ generating: false })
+  },
+  auditionSlot(id) {
+    const rt = getRuntime()
+    const slot = get().progression.slots.find((s) => s.id === id)
+    if (!slot) return
+    rt.ensureAudio()
+    rt.player.audition(slot.symbol)
+  },
+
+  undo() {
+    const prev = editHistory.undo(get().progression)
+    if (!prev) return
+    // Store first — the runtime's synchronous echo must match by identity.
+    set({ progression: prev, canUndo: editHistory.canUndo, canRedo: editHistory.canRedo })
+    getRuntime().applyEdit(prev, true)
+  },
+  redo() {
+    const next = editHistory.redo(get().progression)
+    if (!next) return
+    set({ progression: next, canUndo: editHistory.canUndo, canRedo: editHistory.canRedo })
+    getRuntime().applyEdit(next, true)
+  },
+
+  /** One macro moved: remap ONLY the parameters that macro owns, so Lab
+   * overrides on other macros survive. Moving a macro clears its own
+   * Custom flag and detaches from the active preset. */
+  setMacro(name, value) {
+    const macros = { ...get().macros, [name]: Math.max(0, Math.min(1, value)) }
+    const patch = mapMacrosToEngineParameters(macros)
+    const rt = getRuntime()
+    const customMacros = { ...get().customMacros }
+    delete customMacros[name]
+    const updates: Partial<AppState> = { macros, customMacros, activePresetId: null }
+    switch (name) {
+      case 'familiarity':
+        rt.markov.setAdventure(patch.adventure)
+        rt.registry.setNeuralTemperature(patch.neuralTemperature)
+        updates.adventure = patch.adventure
+        updates.neuralTemp = patch.neuralTemperature
+        break
+      case 'harmonicColor':
+        rt.markov.setColor(patch.color)
+        updates.color = patch.color
+        break
+      case 'tension':
+        rt.markov.setGravity(patch.gravity)
+        rt.sonifier.setColor7th(patch.color7th)
+        rt.tension = macros.tension // cadence preference in respond scoring
+        updates.gravity = patch.gravity
+        updates.color7th = patch.color7th
+        break
+      case 'motion': {
+        const id = rhythmToTemplate(patch.rhythmDensity)
+        const t = TEMPLATES[id]
+        rt.setTemplate(id)
+        updates.rhythm = patch.rhythmDensity
+        updates.rhythmName = t.name
+        updates.rhythmOnsets = t.onsets
+        updates.rhythmSteps = t.spanBars * STEPS_PER_BAR
+        break
+      }
+    }
+    set(updates)
+  },
+
+  applyPreset(id) {
+    const preset: MusicalPreset | null = id === SURPRISE_ID ? surpriseMe(Math.random) : presetById(id)
+    if (!preset) return
+    const s = get()
+    s.setMacro('familiarity', preset.macros.familiarity)
+    s.setMacro('harmonicColor', preset.macros.harmonicColor)
+    s.setMacro('tension', preset.macros.tension)
+    s.setMacro('motion', preset.macros.motion)
+    const o = preset.overrides
+    if (o) {
+      if (o.voicingLevel !== undefined) s.setVoicingLevel(o.voicingLevel)
+      if (o.voiceDistance !== undefined) s.setVoiceDistance(o.voiceDistance)
+      if (o.register !== undefined) s.setRegister(o.register)
+      if (o.swing !== undefined) s.setSwing(o.swing)
+      if (o.swingUnit !== undefined) s.setSwingUnit(o.swingUnit)
+      if (o.keyMode !== undefined) s.setKeyMode(o.keyMode)
+    }
+    set({ activePresetId: id, customMacros: {} })
+  },
+
+  setPhraseSteps(steps) {
+    const v = Math.max(STEPS_PER_BAR / 2, Math.round(steps))
+    getRuntime().setPhraseSteps(v)
+    set({ phraseSteps: v, phraseBars: v / STEPS_PER_BAR })
+  },
+  setRepetitions(n) {
+    const v = Math.max(1, Math.min(16, Math.round(n)))
+    getRuntime().setRepetitions(v)
+    set({ repetitions: v })
+  },
+
+  newListen() {
+    const rt = getRuntime()
+    rt.ensureAudio()
+    if (rt.newListen()) set({ respondPhase: rt.respond.phase, playing: true })
+  },
+  cancelListen() {
+    getRuntime().cancelListen()
+    set({ respondPhase: 'idle', respondProgress: -1 })
+  },
+
+  toggleRhythmStep(step) {
+    const s = get()
+    const pattern = { name: s.rhythmName, spanBars: s.rhythmSteps / STEPS_PER_BAR, onsets: s.rhythmOnsets }
+    const next = toggleOnset(pattern, step)
+    if (next === pattern) return
+    applyPattern(set, get, next)
+  },
+  rotateRhythm(dir) {
+    const s = get()
+    applyPattern(set, get, rotateGrid({ name: CUSTOM_NAME, spanBars: s.rhythmSteps / STEPS_PER_BAR, onsets: s.rhythmOnsets }, dir))
+  },
+  randomizeRhythm() {
+    applyPattern(set, get, randomizeGrid(Math.random))
+  },
+  resetRhythm() {
+    getRuntime().setCustomPattern(null)
+    get().setRhythm(get().rhythm) // back to the dial's template
+  },
+
+  testConnection() {
+    const s = get()
+    const outName = s.midiOutputs.find((p) => p.id === s.midiOutId)?.name ?? null
+    const report = getRuntime().testConnection(outName)
+    set({ testReport: report })
+    setTimeout(() => set({ testReport: null }), 4000)
+  },
+
   reroll() {
-    getRuntime().player.reroll()
+    // Variation semantics: locked slots survive; queued to the boundary
+    // while playing, immediate when stopped.
+    void getRuntime().generateVariation()
   },
 
   panic() {
@@ -294,7 +677,7 @@ export const useStore = create<AppState>((set, get) => ({
   audition() {
     const rt = getRuntime()
     rt.ensureAudio()
-    rt.player.audition()
+    rt.player.audition(rt.seed)
   },
 
   exportMidi() {
@@ -326,19 +709,25 @@ export const useStore = create<AppState>((set, get) => ({
 
   setColor(v) {
     getRuntime().markov.setColor(v)
-    set({ color: v })
+    set({ color: v, customMacros: { ...get().customMacros, harmonicColor: true }, activePresetId: null })
   },
   setAdventure(v) {
     getRuntime().markov.setAdventure(v)
-    set({ adventure: v })
+    set({ adventure: v, customMacros: { ...get().customMacros, familiarity: true }, activePresetId: null })
   },
   setSpice(v) {
     getRuntime().markov.setSpice(v)
-    set({ spice: v, color: v, adventure: v })
+    set({
+      spice: v,
+      color: v,
+      adventure: v,
+      customMacros: { ...get().customMacros, familiarity: true, harmonicColor: true },
+      activePresetId: null,
+    })
   },
   setGravity(v) {
     getRuntime().markov.setGravity(v)
-    set({ gravity: v })
+    set({ gravity: v, customMacros: { ...get().customMacros, tension: true }, activePresetId: null })
   },
 
   async setModel(m) {
@@ -362,12 +751,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setNeuralTemp(v) {
     getRuntime().registry.setNeuralTemperature(v)
-    set({ neuralTemp: v })
+    set({ neuralTemp: v, customMacros: { ...get().customMacros, familiarity: true }, activePresetId: null })
   },
 
   setSeedIndex(i) {
     const idx = Math.max(0, Math.min(SEED_LIST.length - 1, i))
-    getRuntime().player.setSeed(SEED_LIST[idx])
+    getRuntime().setSeed(SEED_LIST[idx])
     set({ seedIndex: idx })
   },
   setKeyRoot(pc) {
@@ -388,13 +777,19 @@ export const useStore = create<AppState>((set, get) => ({
     set({ hold: on })
   },
   setPhraseBars(bars) {
-    getRuntime().player.setLengthBars(bars)
-    set({ phraseBars: bars })
+    get().setPhraseSteps(bars * STEPS_PER_BAR)
   },
   setRhythm(v) {
-    const name = getRuntime().player.setRhythm(v)
     const t = TEMPLATES[rhythmToTemplate(v)]
-    set({ rhythm: v, rhythmName: name, rhythmOnsets: t.onsets, rhythmSteps: t.spanBars * STEPS_PER_BAR })
+    getRuntime().setTemplate(rhythmToTemplate(v))
+    set({
+      rhythm: v,
+      rhythmName: t.name,
+      rhythmOnsets: t.onsets,
+      rhythmSteps: t.spanBars * STEPS_PER_BAR,
+      customMacros: { ...get().customMacros, motion: true },
+      activePresetId: null,
+    })
   },
   setSwing(v) {
     getRuntime().setSwing(v)
@@ -423,7 +818,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
   setColor7th(v) {
     getRuntime().sonifier.setColor7th(v)
-    set({ color7th: v })
+    set({ color7th: v, customMacros: { ...get().customMacros, tension: true }, activePresetId: null })
   },
   setRegister(v) {
     getRuntime().sonifier.setRegister(v)
