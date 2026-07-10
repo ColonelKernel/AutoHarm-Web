@@ -3,6 +3,8 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch: {}
 
 # Allow the workflow to publish to Pages via the deployment API.
@@ -11,10 +13,12 @@ permissions:
   pages: write
   id-token: write
 
-# One in-flight deploy at a time; don't cancel a running publish.
+# Pushes to main share one group so a publish is never cancelled mid-flight.
+# Pull requests key on their own ref, so a PR build can't queue behind a deploy
+# and a superseded PR build is cancelled rather than left running.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -36,11 +40,14 @@ jobs:
       - run: npm test --silent
 
       - uses: actions/upload-pages-artifact@v3
+        if: github.event_name != 'pull_request'
         with:
           path: dist
 
   deploy:
     needs: build
+    # Pull requests build and test only. Publishing stays on main.
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
