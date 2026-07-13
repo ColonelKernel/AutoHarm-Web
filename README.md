@@ -1,5 +1,9 @@
 # AutoHarm
 
+[![Max/MSP sibling: Autoharmonizer](https://img.shields.io/badge/Max%2FMSP%20sibling-Autoharmonizer-8A2BE2?logo=github&logoColor=white)](https://github.com/ColonelKernel/Autoharmonizer)
+
+> The DAW-agnostic web port of the [**Autoharmonizer**](https://github.com/ColonelKernel/Autoharmonizer) Max for Live device — same harmonic brain, running entirely in the browser.
+
 **AutoHarm is a generative harmony instrument you can shape, perform, and play
 against.** It invents chord progressions, shows them as editable chord cards,
 listens to phrases you play on a MIDI keyboard and answers with harmony that
